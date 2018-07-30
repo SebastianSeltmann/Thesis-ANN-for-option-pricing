@@ -1,1 +1,0 @@
-quandl_key = '' # https://www.quandl.com/account/api

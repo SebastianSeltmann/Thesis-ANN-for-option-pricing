@@ -88,8 +88,8 @@ def get_optionsdata_for_year(year):
 start_year = 1996
 end_year = 2016 # up to 2016 ?
 
-start_year = 2010
-end_year = 2011
+# start_year = 2010
+# end_year = 2011
 df = pd.DataFrame()
 for year in range(start_year, end_year):  # range(1996, 2016)
     options_data_year = get_optionsdata_for_year(year)
