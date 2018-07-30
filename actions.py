@@ -174,30 +174,40 @@ def prepare_data_for_full_approach_proper_time(start_date='2010-01-01',
     Y_val = validate[output_columns]
 
     data = X_train, Y_train, X_val, Y_val
-    '''
-    for stock in some_stocks:
-        X_train = prepare_data_for_full_approach_proper_time(stock=stock)[0]
-        print(X_train.shape)
-    '''
 
     return data
 
-def get_data_package(model, columns, include_synth, normalize):
+def get_data_package(model, columns, include_synth, normalize,
+                     start_date='2010-01-01',
+                     end_train_start_val_date='2010-06-30',
+                     end_val_date='2010-12-31',
+                     stock=some_stock):
     number_of_features = model.input.shape[1]._value
     more_than_one_output = type(model.output) is list
     if len(columns) != number_of_features:
         raise('mismatch between model feature count and number of columns selected in data')
-    # if number_of_features == 2 and not more_than_one_output:  # only two input variables (moneyness and time to maturity)
-    #     data = prepare_data_for_rational_approach(-1, -71, -150)  # inSample=inSample
-    #     synth
-    # else:
+
     if more_than_one_output:
         output_columns = ['scaled_option_price', 'perfect_hedge_1']
     else:
         output_columns = ['scaled_option_price']
+    ref_columns = ['prc', 'option_price', 'strike_price', 'prc_shifted_1', 'option_price_shifted_1']
 
-    #data = prepare_data_for_full_approach(-1, -71, -150, input_columns=columns, output_columns=output_columns)
-    data = prepare_data_for_full_approach_proper_time(input_columns=columns, output_columns=output_columns)
+    data = prepare_data_for_full_approach_proper_time(
+        input_columns=columns,
+        output_columns=output_columns,
+        start_date=start_date,
+        end_train_start_val_date=end_train_start_val_date,
+        end_val_date=end_val_date,
+        stock=some_stock)
+    ref_data = prepare_data_for_full_approach_proper_time(
+        input_columns=ref_columns,
+        output_columns=output_columns,
+        start_date=start_date,
+        end_train_start_val_date=end_train_start_val_date,
+        end_val_date=end_val_date,
+        stock=some_stock)
+
     if include_synth:
         X_synth = synth.loc[:,columns]
         Y_synth = synth.loc[:,output_columns]
@@ -209,10 +219,6 @@ def get_data_package(model, columns, include_synth, normalize):
 
         data = new_X_train, new_Y_train, X_val, Y_val
 
-    ref_columns = ['prc', 'option_price', 'strike_price', 'prc_shifted_1', 'option_price_shifted_1']
-    #ref_data_tuple = prepare_data_for_full_approach(-1, -71, -150, input_columns=ref_columns, output_columns=output_columns)
-    ref_data_tuple = prepare_data_for_full_approach_proper_time(input_columns=ref_columns,
-                                                                output_columns=output_columns)
 
     if normalize != 'no':
 
@@ -240,71 +246,11 @@ def get_data_package(model, columns, include_synth, normalize):
         Y_val_scaled = pd.DataFrame(np_Y_val_scaled, index=Y_val.index, columns=Y_val.columns)
 
         data = X_train_scaled, Y_train_scaled, X_val_scaled, Y_val_scaled
-    return data, X_synth, Y_synth, ref_data_tuple, scaler_X, scaler_Y
+    return data, X_synth, Y_synth, ref_data, scaler_X, scaler_Y
 
 def run_and_store_ANN(model, inSample=False, reset='yes', nb_epochs=5, data_package=None, verbose=0, model_name='custom',
                       columns=['days', 'moneyness'], get_deltas=False, include_synth=False, normalize='no',
                       batch_size=25):
-    '''
-    if data is None:
-        number_of_features = model.input.shape[1]._value
-        more_than_one_output = type(model.output) is list
-        if len(columns) != number_of_features:
-            raise('mismatch between model feature count and number of columns selected in data')
-        # if number_of_features == 2 and not more_than_one_output:  # only two input variables (moneyness and time to maturity)
-        #     data = prepare_data_for_rational_approach(-1, -71, -150)  # inSample=inSample
-        #     synth
-        # else:
-        if more_than_one_output:
-            output_columns = ['scaled_option_price', 'perfect_hedge_1']
-        else:
-            output_columns = ['scaled_option_price']
-
-        #data = prepare_data_for_full_approach(-1, -71, -150, input_columns=columns, output_columns=output_columns)
-        data = prepare_data_for_full_approach_proper_time(input_columns=columns, output_columns=output_columns)
-        if include_synth:
-            X_synth = synth.loc[:,columns]
-            Y_synth = synth.loc[:,output_columns]
-            X_train, Y_train, X_val, Y_val = data
-
-            new_X_train = pd.concat([X_train, X_synth])
-            new_Y_train = pd.concat([Y_train, Y_synth])
-
-
-            data = new_X_train, new_Y_train, X_val, Y_val
-
-    ref_columns = ['prc', 'option_price', 'strike_price', 'prc_shifted_1', 'option_price_shifted_1']
-    #ref_data_tuple = prepare_data_for_full_approach(-1, -71, -150, input_columns=ref_columns, output_columns=output_columns)
-    ref_data_tuple = prepare_data_for_full_approach_proper_time(input_columns=ref_columns,
-                                                                output_columns=output_columns)
-
-    if normalize != 'no':
-
-        if normalize == 'rscaler':
-            scaler_X = preprocessing.RobustScaler()
-            scaler_Y = preprocessing.RobustScaler()
-        elif normalize == 'sscaler':
-            scaler_X = preprocessing.StandardScaler()
-            scaler_Y = preprocessing.StandardScaler()
-        elif normalize == 'mmscaler':
-            scaler_X = preprocessing.MinMaxScaler()
-            scaler_Y = preprocessing.MinMaxScaler()
-        else:
-            raise NotImplementedError
-
-        X_train, Y_train, X_val, Y_val = data
-
-        np_X_train_scaled = scaler_X.fit_transform(X_train)
-        np_Y_train_scaled = scaler_Y.fit_transform(Y_train)
-        np_X_val_scaled = scaler_X.transform(X_val)
-        np_Y_val_scaled = scaler_Y.transform(Y_val)
-        X_train_scaled = pd.DataFrame(np_X_train_scaled, index=X_train.index, columns=X_train.columns)
-        Y_train_scaled = pd.DataFrame(np_Y_train_scaled, index=X_train.index, columns=Y_train.columns)
-        X_val_scaled = pd.DataFrame(np_X_val_scaled, index=X_val.index, columns=X_val.columns)
-        Y_val_scaled = pd.DataFrame(np_Y_val_scaled, index=Y_val.index, columns=Y_val.columns)
-
-        data = X_train_scaled, Y_train_scaled, X_val_scaled, Y_val_scaled
-    '''
     if data_package is None:
         data, X_synth, Y_synth, ref_data_tuple, scaler_X, scaler_Y = get_data_package(model, columns, include_synth, normalize)
     else:
