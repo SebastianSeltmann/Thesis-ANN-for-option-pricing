@@ -35,17 +35,17 @@ from config import (
     paths,
     required_precision,
     seed,
-settings_combi_count,
-active_feature_combinations,
-identical_reruns,
-settings_list,
-full_feature_combination_list,
-batch_normalization,
-multi_target,
-separate_initial_epochs,
-lr,
-epochs,
-plottype
+    settings_combi_count,
+    active_feature_combinations,
+    identical_reruns,
+    settings_list,
+    full_feature_combination_list,
+    batch_normalization,
+    multi_target,
+    separate_initial_epochs,
+    lr,
+    epochs,
+    plottype
 )
 from models import (
     stupid_model,
@@ -96,7 +96,15 @@ def do_it():
 
 
 def perform_experiment():
-    
+
+    watches = ['model_name', 'time', 'optimizer', 'lr', 'epochs', 'features', 'activation', 'layers', 'nodes',
+               'batch_normalization', 'loss', 'loss_oos', 'used_synth', 'normalize', 'dropout', 'batch_size',
+               'failed', 'loss_mean', 'loss_std', 'val_loss_mean', 'val_loss_std']
+    cols = {}
+
+    for watch in watches:
+        cols[watch] = []
+    '''
     cols = {
         'model_name': [],
         'time': [],
@@ -121,7 +129,7 @@ def perform_experiment():
         'val_loss_mean': [],
         'val_loss_std': []
     }
-    
+    '''
     interrupt_flag = False
 
     msg = 'Evaluating {} different settings with {} feature combinations, {} time(s) for a total of {} runs.'
@@ -149,6 +157,7 @@ def perform_experiment():
         for j in range(identical_reruns):
             print('{}.{}'.format(i,j+1), end=' ')
 
+            # We reinitialize these variables to None because they will be appended to cols
             loss_oos = last_losses_mean = last_losses_std = last_val_losses_mean =\
                 last_val_losses_std = None
 
@@ -190,10 +199,11 @@ def perform_experiment():
 
             if initial_loss > required_precision:
                 print('FAILED', end=' ')
-                cols['fail'].append(int(True))
+                cols['failed'].append(int(True))
                 loss = initial_loss
 
             else:
+                cols['failed'].append(int(False))
 
                 _, loss, loss_tuple = run_and_store_ANN(model=model, inSample=True, model_name=model_name+'_inSample',
                                             nb_epochs=epochs - separate_initial_epochs, reset='continue',
@@ -207,7 +217,6 @@ def perform_experiment():
                                                 columns=used_features, get_deltas=True,
                                                 normalize=normalization, batch_size=batch_size,
                                                    data_package=data_package)
-                cols['fail'].append(int(False))
 
 
                 (last_losses_mean, last_losses_std, last_val_losses_mean, last_val_losses_std) = loss_tuple
@@ -306,11 +315,6 @@ def perform_experiment():
     except:
         merged_results = results_df
 
-    '''
-    book = load_workbook(paths['results-excel'])
-    writer = pd.ExcelWriter(paths['results-excel'], engine='openpyxl')
-    writer.book = book
-    '''
 
     writer = pd.ExcelWriter(paths['results-excel'])
     merged_results.to_excel(writer, 'RunData')
