@@ -1,5 +1,7 @@
 import os
 
+from sensitive_config import quandl_key
+
 # Path definition
 if os.path.isdir('D:/'):
 	rootpath = "D:\\AlgoTradingData\\"
@@ -32,5 +34,3 @@ for y in range(1996, 2017):
 
 seed = 22
 required_precision = 0.01
-
-quandl_key = 'xHyhpe-jZNm_ADHMp17C'
