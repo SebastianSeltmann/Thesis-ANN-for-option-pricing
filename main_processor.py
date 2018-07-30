@@ -324,16 +324,18 @@ def perform_experiment():
             filename = '{}_{:%Y-%m-%d_%H-%M}.h5'.format(model_name, datetime.now())
             model.save(paths['all_models'] + filename)
 
+            # plt.figure()
+            # plt.figure(figsize=(6, 12))
             for points in [X_train, X_val]:
                 gradients = get_gradients(model, points)
 
                 for i, var in enumerate(points.columns):
                     plt.subplot(6, 2, i + 1)
                     plt.title(var)
+                    x = np.array(points.iloc[:, i])
+                    y = gradients[:, i]
                     if plottype == 'density':
                         nbins = 100
-                        x = np.array(X_train.iloc[:, i])
-                        y = gradients[:, i]
 
                         k = kde.gaussian_kde([x, y], 0.1)
                         xi, yi = np.mgrid[x.min():x.max():nbins * 1j, y.min():y.max():nbins * 1j]
@@ -342,7 +344,7 @@ def perform_experiment():
                         # Make the plot
                         plt.pcolormesh(xi, yi, zi.reshape(xi.shape), cmap=plt.cm.Blues)
                     elif plottype == 'scatter':
-                        plt.scatter(x, y, alpha=len(X_train) * 0.1 / 600, color=[])  # alpha=0.01
+                        plt.scatter(x, y, alpha=len(X_train) * 0.1 / 600)  # alpha=0.01
                     else:
                         raise NotImplementedError
 
@@ -353,8 +355,9 @@ def perform_experiment():
         plt.savefig('plots/Partial_derivatives-scatter.png', bbox_inches="tight")
         plt.show()
 
-        boxplot_SSD_distribution(SSD_distribution_train, used_features, 'Training Data')
-        boxplot_SSD_distribution(SSD_distribution_val, used_features, 'Validation Data')
+        if identical_reruns >= 5:
+            boxplot_SSD_distribution(SSD_distribution_train, used_features, 'Training Data')
+            boxplot_SSD_distribution(SSD_distribution_val, used_features, 'Validation Data')
 
 
 

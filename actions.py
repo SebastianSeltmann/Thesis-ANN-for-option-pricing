@@ -610,16 +610,18 @@ def extract_deltas(model, inputs, strikes):
 
 
 def boxplot_SSD_distribution(SSD_distribution, features, title):
-    SSDD_df = pd.DataFrame(SSD_distribution, columns=features)
+    _features = features.copy()
+
+    SSDD_df = pd.DataFrame(SSD_distribution, columns=_features)
 
     contributions_df = SSDD_df.divide(SSDD_df.sum(axis=1), axis=0)
 
     c_df_without_moneyness = contributions_df.drop('moneyness', axis=1)
-    features.remove('moneyness')
+    _features.remove('moneyness')
 
     plt.figure()
     plt.title(title)
-    plt.boxplot(c_df_without_moneyness.transpose(), labels=features, vert=False)
+    plt.boxplot(c_df_without_moneyness.transpose(), labels=_features, vert=False)
     plt.savefig('plots/SSD-dist-{}.png'.format(title), bbox_inches="tight")
     plt.show()
 
