@@ -34,7 +34,18 @@ from openpyxl import load_workbook
 from config import (
     paths,
     required_precision,
-    seed
+    seed,
+settings_combi_count,
+active_feature_combinations,
+identical_reruns,
+settings_list,
+full_feature_combination_list,
+batch_normalization,
+multi_target,
+separate_initial_epochs,
+lr,
+epochs,
+plottype
 )
 from models import (
     stupid_model,
@@ -70,6 +81,7 @@ from actions import (
     get_gradients,
     boxplot_SSD_distribution
 )
+'''
 from data import (
     sorted_train,
     train,
@@ -77,31 +89,14 @@ from data import (
     some_stock,
     single_stock
 )
-
-
-def get_gradient():
-    import keras.backend as K
-    import numpy as np
-
-    X = K.placeholder(ndim=2)
-    Y = K.sum(K.square(K.round(X)))
-    fn = K.function([X], K.gradients(Y, [X]))
-    print(fn([np.ones((2, 2), dtype=np.float32)]))
-    '''
-    import tensorflow as tf
-    model = Sequential()
-    model.add(....)  # add a couple of layers here
-    x = tf.placeholder(tf.float32, shape=(None, out_dim))
-    y = model(x)
-    loss = K.sum(K.square(y - target))  # just think of any standard loss fn
-    '''
-
+'''
 
 def do_it():
     perform_experiment()
 
 
 def perform_experiment():
+
     col_epochs = []
     col_lr = []
     col_act = []
@@ -126,83 +121,18 @@ def perform_experiment():
 
     col_normalize = []
 
-    ff_dummies = ['ff_ind_{}'.format(i) for i in range(49)]
-    feature_combinations = {
-        0: ['days', 'moneyness'],
-        # 1: ['days', 'moneyness', 'vix'],
-        2: ['days', 'moneyness', 'vix', 'returns', 'r', 'v60', 'v20'],
-        # 3: ['days', 'moneyness', 'vix', 'returns', 'r', 'v60',      ],
-        # 4: ['days', 'moneyness', 'vix', 'returns', 'r',        'v20'],
-        # 5: ['days', 'moneyness', 'vix', 'returns',      'v60', 'v20'],
-        # 6: ['days', 'moneyness', 'vix',            'r', 'v60', 'v20'],
-        # 7: ['days', 'moneyness',        'returns', 'r', 'v60', 'v20'],
-        # 8: ['days', 'moneyness', 'vix', 'returns', 'r', 'v60', 'v20'] + ff_dummies,
-    }
-
-    mandatory_features = ['days', 'moneyness']
-    optional_features = []
-    optional_features += ['vix', 'returns', 'r', 'v60', 'v20']
-    optional_features += ['roe', 'roa', 'capital_ratio']
-    optional_features += ['pe_op_dil']  # ,'pe_op_basic'
-
-    full_feature_combination_list = []
-    include_only_single_features = False
-    for i in range(len(optional_features)+1):
-        if not include_only_single_features or i <= 1:
-            for tuple in list(itertools.combinations(optional_features, i)):
-                feature_selection = mandatory_features + list(tuple)
-                full_feature_combination_list.append(feature_selection)
-
-    epochs = 1500
-    separate_initial_epochs = int(epochs / 10)
-    lr = None # 0.0001
-    batch_normalization = False
-    multi_target = False
-
     interrupt_flag = False
-    identical_reruns = 1
 
-
-    activations = ['relu'] #'tanh'
-    number_of_nodes = [250]
-    number_of_layers = [5]
-    optimizers = ['adam']
-    include_synthetic_datas = [True]
-    dropout_rates = [0.1]
-    batch_sizes = [200] # 100,
-    normalizations = ['mmscaler'] # 'no', 'rscaler', 'sscaler',
-    # active_feature_combinations = list(feature_combinations.keys())
-    # active_feature_combinations = list(range(len(full_feature_combination_list)))   # all possible combinations
-    # active_feature_combinations = [0, len(full_feature_combination_list)-1]         # every and nothing
-    active_feature_combinations = [len(full_feature_combination_list)-1]            # "full" model only
-
-    settings_list = [
-        activations,
-        number_of_nodes,
-        number_of_layers,
-        optimizers,
-        include_synthetic_datas,
-        dropout_rates,
-        normalizations,
-        batch_sizes
-    ]
-
-
-    settings_combi_count = 1
-    for setting_options in settings_list:
-        settings_combi_count *= len(setting_options)
     msg = 'Evaluating {} different settings with {} feature combinations, {} time(s) for a total of {} runs.'
-    print(msg.format(settings_combi_count,
+    print(msg.format(int(settings_combi_count / len(active_feature_combinations)),
                      len(active_feature_combinations),
                      identical_reruns,
                      settings_combi_count*len(active_feature_combinations)*identical_reruns
                      ))
 
-    settings_list.append(active_feature_combinations)
     i = 0
 
     plt.figure(figsize=(6, 12))
-    plottype = 'scatter'
 
     for settings in itertools.product(*settings_list): # equivalent to a bunch of nested for-loops
         i += 1
@@ -326,27 +256,28 @@ def perform_experiment():
 
             # plt.figure()
             # plt.figure(figsize=(6, 12))
-            for points in [X_train, X_val]:
-                gradients = get_gradients(model, points)
+            if plottype is not None:
+                for points in [X_train, X_val]:
+                    gradients = get_gradients(model, points)
 
-                for i, var in enumerate(points.columns):
-                    plt.subplot(6, 2, i + 1)
-                    plt.title(var)
-                    x = np.array(points.iloc[:, i])
-                    y = gradients[:, i]
-                    if plottype == 'density':
-                        nbins = 100
+                    for i, var in enumerate(points.columns):
+                        plt.subplot(6, 2, i + 1)
+                        plt.title(var)
+                        x = np.array(points.iloc[:, i])
+                        y = gradients[:, i]
+                        if plottype == 'density':
+                            nbins = 100
 
-                        k = kde.gaussian_kde([x, y], 0.1)
-                        xi, yi = np.mgrid[x.min():x.max():nbins * 1j, y.min():y.max():nbins * 1j]
-                        zi = k(np.vstack([xi.flatten(), yi.flatten()]))
+                            k = kde.gaussian_kde([x, y], 0.1)
+                            xi, yi = np.mgrid[x.min():x.max():nbins * 1j, y.min():y.max():nbins * 1j]
+                            zi = k(np.vstack([xi.flatten(), yi.flatten()]))
 
-                        # Make the plot
-                        plt.pcolormesh(xi, yi, zi.reshape(xi.shape), cmap=plt.cm.Blues)
-                    elif plottype == 'scatter':
-                        plt.scatter(x, y, alpha=len(X_train) * 0.1 / 600)  # alpha=0.01
-                    else:
-                        raise NotImplementedError
+                            # Make the plot
+                            plt.pcolormesh(xi, yi, zi.reshape(xi.shape), cmap=plt.cm.Blues)
+                        elif plottype == 'scatter':
+                            plt.scatter(x, y, alpha=len(X_train) * 0.1 / 600)  # alpha=0.01
+                        else:
+                            raise NotImplementedError
 
             if interrupt_flag:
                 break
