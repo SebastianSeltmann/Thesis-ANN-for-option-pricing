@@ -2,6 +2,24 @@ import os
 import itertools
 
 from sensitive_config import quandl_key
+assert quandl_key is not None
+
+start_year = 1996
+end_year = 2016
+
+do_redownload_all_data = False
+fundamental_columns_to_include = [
+    'permno',
+    'public_date',
+
+    'ffi49',
+    'roe',
+    'roa',
+    'capital_ratio',
+
+    'pe_op_basic',
+    'pe_op_dil'
+]
 
 # Path definition
 if os.path.isdir('D:/'):
@@ -22,7 +40,7 @@ paths['results-excel'] = 'results_excel.xlsx'
 paths['all_models'] = rootpath + "all_models\\"
 
 
-paths['h5 constituents & prices'] = rootpath + "Data[IDs, constituents, prices].h5"
+paths['prices_raw'] = rootpath + "Data[IDs, constituents, prices].h5"
 paths['all_options_h5'] = rootpath + "all_options.h5"
 paths['treasury'] = rootpath + '3months-treasury.h5'
 paths['vix'] = rootpath + 'vix.h5'
