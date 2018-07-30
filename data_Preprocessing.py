@@ -111,7 +111,7 @@ def download_dividends_data(db=None):
 
 
 def download_fundamentals_data(db=None):
-    print('Downloading fundamentals data', end=' ', flush=True)
+    print('Downloading fundamentals data:', end=' ', flush=True)
     if db is None:
         db = wrds.Connection()
     permnos = prices_raw.permno.drop_duplicates()
@@ -131,7 +131,7 @@ def download_fundamentals_data(db=None):
 
 
 def download_names_data(db=None):
-    print('Downloading names data')
+    print('Downloading names data:', end=' ', flush=True)
     if db is None:
         db = wrds.Connection()
     permnos = prices_raw.permno.drop_duplicates()
@@ -140,9 +140,9 @@ def download_names_data(db=None):
              "where nameenddt > '" + str(start_year) + "0101' "
              "and namedt < '" + str(end_year) + "0101' "
              "and permno in (" + ','.join(permnos.astype(str)) + ")")
-    print('Starting Query')
+    print('Starting Query...', end='', flush=True)
     names = db.raw_sql(query)
-    print('Finished Query')
+    print('Finished')
 
     store = pd.HDFStore(paths['names'])
     store['names'] = names
@@ -170,7 +170,8 @@ with pd.HDFStore(paths['prices_raw']) as store:
 # print(prices_raw.count())
 
 
-if do_redownload_all_data or True:
+# Data redownload is placed here, because it needs the prices_raw DataFrame
+if do_redownload_all_data:
     redownload_all_data()
 
 print(', treasury', end='', flush=True)
