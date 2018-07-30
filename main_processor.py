@@ -96,31 +96,32 @@ def do_it():
 
 
 def perform_experiment():
+    
+    cols = {
+        'model_name': [],
+        'time': [],
+        'optimizer': [],
+        'lr': [],
+        'epochs': [],
+        'features': [],
+        'activation': [],
+        'layers': [],
+        'nodes': [],
+        'batch_normalization': [],
+        'loss': [],
+        'loss_oos': [],
+        'used_synth': [],
+        'normalize': [],
+        'dropout': [],
+        'batch_size': [],
 
-    col_epochs = []
-    col_lr = []
-    col_act = []
-    col_l = []
-    col_n = []
-    col_loss = []
-    col_loss_oos = []
-    col_features = []
-    col_optimizer = []
-    col_bn = []
-    col_synth = []
-    col_fail = []
-    col_time = []
-    col_name = []
-    col_dropout = []
-
-    col_loss_mean = []
-    col_loss_std = []
-    col_val_loss_mean = []
-    col_val_loss_std = []
-    col_batch_size = []
-
-    col_normalize = []
-
+        'failed': [],
+        'loss_mean': [],
+        'loss_std': [],
+        'val_loss_mean': [],
+        'val_loss_std': []
+    }
+    
     interrupt_flag = False
 
     msg = 'Evaluating {} different settings with {} feature combinations, {} time(s) for a total of {} runs.'
@@ -189,7 +190,7 @@ def perform_experiment():
 
             if initial_loss > required_precision:
                 print('FAILED', end=' ')
-                col_fail.append(int(True))
+                cols['fail'].append(int(True))
                 loss = initial_loss
 
             else:
@@ -206,7 +207,7 @@ def perform_experiment():
                                                 columns=used_features, get_deltas=True,
                                                 normalize=normalization, batch_size=batch_size,
                                                    data_package=data_package)
-                col_fail.append(int(False))
+                cols['fail'].append(int(False))
 
 
                 (last_losses_mean, last_losses_std, last_val_losses_mean, last_val_losses_std) = loss_tuple
@@ -226,28 +227,31 @@ def perform_experiment():
             if pos_fff > -1:
                 feature_string = feature_string[0:pos_fff] + "_fff"
 
-            col_loss.append(loss)
-            col_loss_oos.append(loss_oos)
-            col_loss_mean.append(last_losses_mean)
-            col_loss_std.append(last_losses_std)
-            col_val_loss_mean.append(last_val_losses_mean)
-            col_val_loss_std.append(last_val_losses_std)
 
-            col_epochs.append(epochs)
-            col_lr.append(lr)
-            col_optimizer.append(optimizer)
-            col_dropout.append(dropout_rate)
+            cols['model_name'].append(model_name)
+            cols['time'].append(datetime.now())
 
-            col_act.append(act)
-            col_l.append(l)
-            col_n.append(n)
-            col_features.append(feature_string)
-            col_bn.append(batch_normalization)
-            col_synth.append(int(include_synthetic_data))
-            col_normalize.append(normalization)
-            col_time.append(datetime.now())
-            col_name.append(model_name)
-            col_batch_size.append(batch_size)
+            cols['loss'].append(loss)
+            cols['loss_oos'].append(loss_oos)
+            cols['loss_mean'].append(last_losses_mean)
+            cols['loss_std'].append(last_losses_std)
+            cols['val_loss_mean'].append(last_val_losses_mean)
+            cols['val_loss_std'].append(last_val_losses_std)
+
+            cols['epochs'].append(epochs)
+            cols['optimizer'].append(optimizer)
+            cols['lr'].append(lr)
+            cols['features'].append(feature_string)
+            cols['activation'].append(act)
+            cols['layers'].append(l)
+            cols['nodes'].append(n)
+            cols['batch_normalization'].append(batch_normalization)
+
+            cols['used_synth'].append(int(include_synthetic_data))
+            cols['normalize'].append(normalization)
+            cols['dropout'].append(dropout_rate)
+            cols['batch_size'].append(batch_size)
+
 
             print(loss)
 
@@ -292,31 +296,7 @@ def perform_experiment():
 
 
 
-    results_df = pd.DataFrame(
-        {
-            'model_name': col_name,
-            'time': col_time,
-            'optimizer': col_optimizer,
-            'lr': col_lr,
-            'epochs': col_epochs,
-            'features': col_features,
-            'activation': col_act,
-            'layers': col_l,
-            'nodes': col_n,
-            'batch_normalization': col_bn,
-            'loss': col_loss,
-            'loss_oos': col_loss_oos,
-            'used_synth': col_synth,
-            'normalize': col_normalize,
-            'dropout': col_dropout,
-            'batch_size': col_batch_size,
-
-            'failed': col_fail,
-            'loss_mean': col_loss_mean,
-            'loss_std': col_loss_std,
-            'val_loss_mean': col_val_loss_mean,
-            'val_loss_std': col_val_loss_std
-         })
+    results_df = pd.DataFrame(cols)
 
     try:
         xl = pd.ExcelFile(paths['results-excel'])
@@ -337,7 +317,7 @@ def perform_experiment():
     writer.save()
     writer.close()
     print('Done')
-    if not col_fail[-1]:
+    if not cols['fail'][-1]:
         get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='prediction')
         get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='error')
         get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='calculated_delta')
