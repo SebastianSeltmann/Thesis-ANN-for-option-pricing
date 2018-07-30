@@ -30,6 +30,7 @@ import itertools
 import matplotlib.pyplot as plt
 from scipy.stats import kde
 from openpyxl import load_workbook
+from time import time
 
 from config import (
     paths,
@@ -45,7 +46,9 @@ from config import (
     separate_initial_epochs,
     lr,
     epochs,
-    plottype
+    plottype,
+    windows_list,
+    window_combi_count
 )
 from models import (
     stupid_model,
@@ -99,7 +102,8 @@ def perform_experiment():
 
     watches = ['model_name', 'time', 'optimizer', 'lr', 'epochs', 'features', 'activation', 'layers', 'nodes',
                'batch_normalization', 'loss', 'loss_oos', 'used_synth', 'normalize', 'dropout', 'batch_size',
-               'failed', 'loss_mean', 'loss_std', 'val_loss_mean', 'val_loss_std']
+               'failed', 'loss_mean', 'loss_std', 'val_loss_mean', 'val_loss_std', 'stock', 'dt_start', 'dt_middle',
+               'dt_end', 'duration']
     cols = {}
 
     for watch in watches:
@@ -132,17 +136,18 @@ def perform_experiment():
     '''
     interrupt_flag = False
 
-    msg = 'Evaluating {} different settings with {} feature combinations, {} time(s) for a total of {} runs.'
+    msg = 'Evaluating {} different settings with {} feature combinations, in {} windows, each {} times for a total of {} runs.'
     print(msg.format(int(settings_combi_count / len(active_feature_combinations)),
                      len(active_feature_combinations),
+                     window_combi_count,
                      identical_reruns,
-                     settings_combi_count*len(active_feature_combinations)*identical_reruns
+                     settings_combi_count*len(active_feature_combinations)*window_combi_count*identical_reruns
                      ))
 
-    i = 0
 
     plt.figure(figsize=(6, 12))
 
+    i = 0
     for settings in itertools.product(*settings_list): # equivalent to a bunch of nested for-loops
         i += 1
         SSD_distribution_train = []
@@ -153,8 +158,12 @@ def perform_experiment():
             sl, il = l
             l = sl + il
 
+        j = 0
+        for window in itertools.product(*windows_list):
+            j += 1
+            stock, date_tuple, rerun_id = window
+            dt_start, dt_middle, dt_end = date_tuple
 
-        for j in range(identical_reruns):
             print('{}.{}'.format(i,j+1), end=' ')
 
             # We reinitialize these variables to None because they will be appended to cols
@@ -186,12 +195,24 @@ def perform_experiment():
 
             model.name = model_name
 
-            data_package = get_data_package(model, columns=used_features, include_synth=include_synthetic_data,
-                                            normalize=normalization)
+            # when rerun_id is 0, that means we just switched to a new stock or date, or setting
+            # that is when we need to get the data again
+            if rerun_id == 0:
+                # data_package = get_data_package(model, columns=used_features, include_synth=include_synthetic_data, normalize=normalization)
+                data_package = get_data_package(
+                    model=model,
+                    columns=used_features,
+                    include_synth=include_synthetic_data,
+                    normalize=normalization,
+                    stock=stock,
+                    start_date=dt_start,
+                    end_train_start_val_date=dt_middle,
+                    end_val_date=dt_end
+                )
 
             if lr is not None:
                 K.set_value(model.optimizer.lr, lr)
-
+            model_start_time = time()
             _, initial_loss, _ = run_and_store_ANN(model=model, inSample=True, model_name='i_'+model_name+'_inSample',
                               nb_epochs=separate_initial_epochs, reset='yes', columns=used_features,
                               include_synth=include_synthetic_data, normalize=normalization, batch_size=batch_size,
@@ -229,6 +250,7 @@ def perform_experiment():
                 SSD_distribution_train.append(SSD_train)
                 SSD_distribution_val.append(SSD_val)
 
+            model_end_time = time()
 
             feature_string = '_'.join(used_features)
             pos_fff = feature_string.find("_ff_ind")
@@ -239,6 +261,13 @@ def perform_experiment():
 
             cols['model_name'].append(model_name)
             cols['time'].append(datetime.now())
+            cols['duration'].append(model_end_time - model_start_time)
+
+            cols['stock'].append(stock)
+            cols['dt_start'].append(dt_start)
+            cols['dt_middle'].append(dt_middle)
+            cols['dt_end'].append(dt_end)
+
 
             cols['loss'].append(loss)
             cols['loss_oos'].append(loss_oos)

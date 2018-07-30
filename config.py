@@ -114,9 +114,21 @@ settings_list = [
     active_feature_combinations
 ]
 
+# stock_list = ['some stock', 'other_stock']
+# date_tuple_list = [('start1', 'middle1', 'end1'), ('start2', 'middle2', 'end2')]
+stock_list = [10137]
+date_tuple_list = [('2010-01-01', '2010-06-30', '2010-12-31')]
+
+windows_list = [
+    stock_list,
+    date_tuple_list,
+    list(range(identical_reruns))
+]
+
 settings_combi_count = 1
 for setting_options in settings_list:
     settings_combi_count *= len(setting_options)
 
-plottype = 'scatter'
+window_combi_count = len(stock_list)*len(date_tuple_list)
 
+plottype = 'scatter'
