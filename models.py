@@ -249,6 +249,8 @@ def black_scholes_price(m,t,r,s,type='call'):
     d2 = d1 - s*t**(1/2)
     if type == 'put':
         price = norm.cdf(d1) * 1 - norm.cdf(d2) * m * np.exp(-r * t)
-    else:
+    elif type == 'call':
         price = norm.cdf(-d2) * m * np.exp(-r * t) - norm.cdf(-d1) * 1
+    else:
+        raise ValueError("type must be 'call' or 'put'")
     return price
