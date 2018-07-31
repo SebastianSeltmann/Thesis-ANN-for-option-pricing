@@ -48,7 +48,8 @@ from config import (
     epochs,
     plottype,
     windows_list,
-    window_combi_count
+    window_combi_count,
+    saveResultsForLatex
 )
 from models import (
     stupid_model,
@@ -145,7 +146,6 @@ def perform_experiment():
                      ))
 
 
-    plt.figure(figsize=(6, 12))
 
     i = 0
     for settings in itertools.product(*settings_list): # equivalent to a bunch of nested for-loops
@@ -157,6 +157,9 @@ def perform_experiment():
         if type(l) is tuple:
             sl, il = l
             l = sl + il
+
+        plt.figure(figsize=(6, 12))
+        fig, axes = plt.subplots(5, 3)
 
         j = 0
         for window in itertools.product(*windows_list):
@@ -298,28 +301,17 @@ def perform_experiment():
 
             # plt.figure()
             # plt.figure(figsize=(6, 12))
+            number_runs_in_same_plot = window_combi_count*identical_reruns
             if plottype is not None:
                 for points in [X_train, X_val]:
                     gradients = get_gradients(model, points)
 
                     for i, var in enumerate(points.columns):
-                        plt.subplot(6, 2, i + 1)
-                        plt.title(var)
+                        #plt.subplot(6, 2, i + 1)
+                        axes[i].title(var)
                         x = np.array(points.iloc[:, i])
                         y = gradients[:, i]
-                        if plottype == 'density':
-                            nbins = 100
-
-                            k = kde.gaussian_kde([x, y], 0.1)
-                            xi, yi = np.mgrid[x.min():x.max():nbins * 1j, y.min():y.max():nbins * 1j]
-                            zi = k(np.vstack([xi.flatten(), yi.flatten()]))
-
-                            # Make the plot
-                            plt.pcolormesh(xi, yi, zi.reshape(xi.shape), cmap=plt.cm.Blues)
-                        elif plottype == 'scatter':
-                            plt.scatter(x, y, alpha=len(X_train) * 0.1 / 600)  # alpha=0.01
-                        else:
-                            raise NotImplementedError
+                        axes[i].scatter(x, y, alpha=len(X_train) * 0.1 / 600 / number_runs_in_same_plot)  # alpha=0.01
 
             if interrupt_flag:
                 break
@@ -328,11 +320,15 @@ def perform_experiment():
         plt.savefig('plots/Partial_derivatives-scatter.png', bbox_inches="tight")
         plt.show()
 
-        if identical_reruns >= 5:
+        if j >= 5:
             boxplot_SSD_distribution(SSD_distribution_train, used_features, 'Training Data')
             boxplot_SSD_distribution(SSD_distribution_val, used_features, 'Validation Data')
 
+            if saveResultsForLatex:
+                SSDD_df = pd.DataFrame(SSD_distribution_val, columns=used_features)
 
+                with pd.HDFStore(paths['data_for_latex']) as store:
+                    store['SSDD_df'] = SSDD_df
 
     results_df = pd.DataFrame(cols)
 
@@ -350,7 +346,7 @@ def perform_experiment():
     writer.save()
     writer.close()
     print('Done')
-    if not cols['fail'][-1]:
+    if not cols['failed'][-1]:
         get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='prediction')
         get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='error')
         get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='calculated_delta')
