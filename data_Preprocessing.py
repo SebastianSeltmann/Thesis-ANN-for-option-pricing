@@ -3,13 +3,16 @@ import numpy as np
 import quandl
 import wrds as wrds
 import datetime
+import calendar
 
 from config import (
     paths,
     quandl_key,
     start_year,
     end_year,
-    do_redownload_all_data
+    do_redownload_all_data,
+    fundamental_columns_to_include,
+    stock_count_to_pick
 )
 
 
@@ -35,6 +38,18 @@ from reused_code import fetch_and_store_sp500, store_options
 
 
 quandl.ApiConfig.api_key = quandl_key
+
+def show_larged_globals():
+    import operator
+    import sys
+    copy = globals().copy()
+    size_dict = {}
+    for key, obj in copy.items():
+        size_dict[key] = sys.getsizeof(copy[key])
+    sorted_locals = sorted(size_dict.items(), key=operator.itemgetter(1))
+    for tuple in sorted_locals[-6:-1]:
+        name, size = tuple
+        print('{}: {}'.format(name, size))
 
 def determine_available_wrds_data(db=None):
     print('Determining available wrds data')
@@ -185,15 +200,19 @@ with pd.HDFStore(paths['vix']) as store:
 print(', ratios', end='', flush=True)
 with pd.HDFStore(paths['ratios']) as store:
     ratios = store['ratios']
+    idx1 = ratios.public_date > datetime.date(start_year, 1, 1)
+    idx2 = ratios.public_date < datetime.date(end_year, 1, 1)
+    ratios = ratios.loc[idx1 & idx2]
 
-print(', names', end='', flush=True)
-with pd.HDFStore(paths['names']) as store:
-    names = store['names']
-
-print(', dividends')
+'''
+print(', dividends', end='', flush=True)
 with pd.HDFStore(paths['dividends']) as store:
     dividends = store['dividends']
+'''
 
+print(', names')
+with pd.HDFStore(paths['names']) as store:
+    names = store['names']
 
 df = pd.DataFrame()
 for year in range(start_year, end_year):  # range(1996, 2016)
@@ -246,8 +265,22 @@ merged = pd.merge(merged, vix.loc[:,'Close'].reset_index(), left_on='date', righ
 merged.drop(['Date', 'Trade Date'], axis=1, inplace=True)
 merged.rename(index=str, columns={"Value": "r", "Close": "vix"}, inplace=True)
 
+print('Cleaning memory')
+del(df)
+del(options_data_year)
+del(prices_raw)
+del(ser_v5)
+del(ser_v20)
+del(ser_v60)
+del(ser_v110)
+del(ser_returns)
+
+del(returns)
+del(prices)
+
+
 print('Merging with fundamentals data')
-fundamental_columns_to_include = ratios.columns
+# fundamental_columns_to_include = ratios.columns
 ratios_to_merge = ratios.loc[:,fundamental_columns_to_include]
 
 dummies = pd.get_dummies(ratios_to_merge.ffi49.fillna(0).astype(int), prefix='ff_ind')
@@ -259,7 +292,6 @@ for dummy in complete_dummy_list:
 ratios_to_merge = pd.concat([ratios_to_merge, dummies], axis=1)
 
 def get_last_day_of_month(date):
-    import calendar
     last_day = calendar.monthrange(date.year, date.month)[1]
     return datetime.date(date.year, date.month, last_day)
 
@@ -293,10 +325,22 @@ merged['moneyness'] = merged.prc / merged.strike_price
 merged['scaled_option_price'] = merged.option_price / merged.strike_price
 merged['scaled_option_price_shifted_1'] = merged.option_price_shifted_1 / merged.strike_price
 
+
+print('Cleaning memory')
+del(ratios)
+del(ratios_to_merge)
+del(dummies)
+del(idx1)
+del(idx2)
+#del(names)
+
+'''
 print('Computing perfect hedge (with hindsight)')
 merged.loc[:, 'perfect_hedge_1'] = -( merged.loc[:, 'prc'] - merged.loc[:, 'prc_shifted_1']
                                       ) / (
                                     merged.loc[:, 'option_price'] - merged.loc[:, 'option_price_shifted_1'])
+
+
 
 merged = merged.replace([np.inf, -np.inf], 0) # Sketchy
 
@@ -305,9 +349,36 @@ merged.loc[:, 'P_value_change_1'] = (merged.loc[:, 'prc_shifted_1'] - merged.loc
                                         merged.loc[:, 'perfect_hedge_1'] *
                                         (merged.loc[:, 'option_price_shifted_1'] - merged.loc[:, 'option_price'])
                                     )
+'''
 
+print('merged.shape: {}'.format(merged.shape))
 
-print(merged.shape)
+print('Determining stocks with most consistent data availability')
+#names = train.reset_index().loc[:, ['permno', 'comnam', 'ticker']].drop_duplicates()
+
+def year_and_stock(index):
+    date, stock = index
+    return '{} {}'.format(date.year, stock)
+
+counts_with_bad_index = merged.strike_price.groupby(year_and_stock).count()
+index_df = pd.DataFrame(counts_with_bad_index.index.str.split().tolist(), columns=['year', 'permno'])
+counts = pd.DataFrame(dict(year=index_df.year, permno=index_df.stock, count=counts_with_bad_index.values))
+counts.stock = pd.to_numeric(counts.stock)
+
+named_counts = pd.merge(counts, names, left_on='permno', right_on='permno')
+named_counts.drop(['permno'], axis=1, inplace=True)
+
+stocks_occur_counts = named_counts.stock.value_counts()
+omnipresent_stocks = stocks_occur_counts.loc[stocks_occur_counts == end_year - start_year].index  # occurs every year
+idx = named_counts.permno.isin(omnipresent_stocks)
+named_counts_omnipresent = named_counts.loc[idx]
+
+stocks_weakest_years = named_counts_omnipresent.groupby(['permno']).min()
+most_consistent_stocks = list(stocks_weakest_years.sort_values(['count']).tail(stock_count_to_pick).index)
+idx = named_counts.permno.isin(most_consistent_stocks)
+named_counts_most_consistent = named_counts_omnipresent.loc[idx]
+print(named_counts_most_consistent.groupby('permno').min()[['count', 'ticker', 'comnam']])
+
 
 print('Splitting data into train, validation & test sets')
 train, validate, test = np.split(merged.sample(frac=1, random_state=69777), [int(.6 * len(merged)), int(.8 * len(merged))])

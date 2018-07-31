@@ -4,8 +4,11 @@ import itertools
 from sensitive_config import quandl_key
 assert quandl_key is not None
 
-start_year = 1996
+saveResultsForLatex = True
+
+start_year = 2010
 end_year = 2016
+stock_count_to_pick = 5
 
 do_redownload_all_data = False
 fundamental_columns_to_include = [
@@ -28,6 +31,8 @@ else:
 	rootpath = "C:\\AlgoTradingData\\"
 
 paths = {}
+paths['data_for_latex'] = rootpath + "data_for_latex.h5"
+
 paths['options_for_ann'] = rootpath + "options_for_ann_short.h5"
 paths['weights'] = rootpath + "weights.h5"
 paths['neural_net_output'] = rootpath + "ANN-output.h5"
@@ -93,8 +98,8 @@ activations = ['relu']  # 'tanh'
 number_of_nodes = [250]
 number_of_layers = [5]
 optimizers = ['adam']
-include_synthetic_datas = [True]
-dropout_rates = [0.1]
+include_synthetic_datas = [True, False]
+dropout_rates = [0.1, 0.0]
 batch_sizes = [200]  # 100,
 normalizations = ['mmscaler']  # 'no', 'rscaler', 'sscaler',
 # active_feature_combinations = list(feature_combinations.keys())
