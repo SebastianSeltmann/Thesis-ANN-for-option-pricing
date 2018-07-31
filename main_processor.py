@@ -79,7 +79,8 @@ from actions import (
     get_data_package,
     get_SSD,
     get_gradients,
-    boxplot_SSD_distribution
+    boxplot_SSD_distribution,
+    scatterplot_PAD
 )
 from data import (
     windows_list,
@@ -104,37 +105,12 @@ def perform_experiment():
     watches = ['model_name', 'time', 'optimizer', 'lr', 'epochs', 'features', 'activation', 'layers', 'nodes',
                'batch_normalization', 'loss', 'loss_oos', 'used_synth', 'normalize', 'dropout', 'batch_size',
                'failed', 'loss_mean', 'loss_std', 'val_loss_mean', 'val_loss_std', 'stock', 'dt_start', 'dt_middle',
-               'dt_end', 'duration']
+               'dt_end', 'duration', 'N_train', 'N_val']
     cols = {}
 
     for watch in watches:
         cols[watch] = []
-    '''
-    cols = {
-        'model_name': [],
-        'time': [],
-        'optimizer': [],
-        'lr': [],
-        'epochs': [],
-        'features': [],
-        'activation': [],
-        'layers': [],
-        'nodes': [],
-        'batch_normalization': [],
-        'loss': [],
-        'loss_oos': [],
-        'used_synth': [],
-        'normalize': [],
-        'dropout': [],
-        'batch_size': [],
 
-        'failed': [],
-        'loss_mean': [],
-        'loss_std': [],
-        'val_loss_mean': [],
-        'val_loss_std': []
-    }
-    '''
     interrupt_flag = False
 
     msg = 'Evaluating {} different settings with {} feature combinations, in {} windows, each {} times for a total of {} runs.'
@@ -155,9 +131,6 @@ def perform_experiment():
         if type(l) is tuple:
             sl, il = l
             l = sl + il
-
-        plt.figure(figsize=(6, 12))
-        fig, axes = plt.subplots(5, 3)
 
         j = 0
         for window in itertools.product(*windows_list):
@@ -210,6 +183,8 @@ def perform_experiment():
                     end_train_start_val_date=dt_middle,
                     end_val_date=dt_end
                 )
+                N_train = len(data_package[0][0])
+                N_val = len(data_package[0][2])
 
             if lr is not None:
                 K.set_value(model.optimizer.lr, lr)
@@ -244,7 +219,7 @@ def perform_experiment():
                 (last_losses_mean, last_losses_std, last_val_losses_mean, last_val_losses_std) = loss_tuple
 
                 data = data_package[0]
-                X_train = data[2]
+                X_train = data[0]
                 X_val = data[2]
                 SSD_train = get_SSD(model, X_train)
                 SSD_val = get_SSD(model, X_val)
@@ -263,6 +238,8 @@ def perform_experiment():
             cols['model_name'].append(model_name)
             cols['time'].append(datetime.now())
             cols['duration'].append(model_end_time - model_start_time)
+            cols['N_train'].append(N_train)
+            cols['N_val'].append(N_val)
 
             cols['stock'].append(stock)
             cols['dt_start'].append(dt_start)
@@ -297,25 +274,11 @@ def perform_experiment():
             filename = '{}_{:%Y-%m-%d_%H-%M}.h5'.format(model_name, datetime.now())
             model.save(paths['all_models'] + filename)
 
-            # plt.figure()
-            # plt.figure(figsize=(6, 12))
-            number_runs_in_same_plot = window_combi_count*identical_reruns
-            for points in [X_train, X_val]:
-                gradients = get_gradients(model, points)
-
-                for i, var in enumerate(points.columns):
-                    #plt.subplot(6, 2, i + 1)
-                    axes[i].title(var)
-                    x = np.array(points.iloc[:, i])
-                    y = gradients[:, i]
-                    axes[i].scatter(x, y, alpha=len(X_train) * 0.1 / 600 / number_runs_in_same_plot)  # alpha=0.01
+            if rerun_id == 0:
+                scatterplot_PAD(model, [X_train, X_val], i)
 
             if interrupt_flag:
                 break
-
-        plt.tight_layout()
-        plt.savefig('plots/Partial_derivatives-scatter.png', bbox_inches="tight")
-        plt.show()
 
         if j >= 5:
             boxplot_SSD_distribution(SSD_distribution_train, used_features, 'Training Data')
@@ -330,18 +293,17 @@ def perform_experiment():
     results_df = pd.DataFrame(cols)
 
     try:
-        xl = pd.ExcelFile(paths['results-excel'])
-        previous_results = xl.parse("RunData")
+        with pd.ExcelFile(paths['results-excel']) as reader:
+            previous_results = reader.parse("RunData")
 
         merged_results = pd.concat([results_df, previous_results])
     except:
         merged_results = results_df
 
+    with pd.ExcelWriter(paths['results-excel']) as writer:
+        merged_results.to_excel(writer, 'RunData')
+        writer.save()
 
-    writer = pd.ExcelWriter(paths['results-excel'])
-    merged_results.to_excel(writer, 'RunData')
-    writer.save()
-    writer.close()
     print('Done')
     if not cols['failed'][-1]:
         get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='prediction')

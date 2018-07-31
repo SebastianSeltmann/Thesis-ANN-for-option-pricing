@@ -475,6 +475,28 @@ def boxplot_SSD_distribution(SSD_distribution, features, title):
     plt.savefig('plots/SSD-dist-{}.png'.format(title), bbox_inches="tight")
     plt.show()
 
+def scatterplot_PAD(model, datasets, id):
+    fig, axes = plt.subplots(4, 3, figsize=(10, 12))
+    axes = axes.flatten()
+    for points in datasets:
+        gradients = get_gradients(model, points)
+
+        for i, var in enumerate(points.columns):
+            axes[i].set_title(var)
+            x = np.array(points.iloc[:, i])
+            y = gradients[:, i]
+            axes[i].scatter(x, y, alpha=0.1, marker='o', s=0.3)  # alpha=0.01
+    for unneeded in range(i + 1, len(axes)):
+        fig.delaxes(axes[unneeded])
+    plt.tight_layout()
+
+    if id > 0:
+        filename = 'plots/Partial_derivatives-scatter_{}.png'.format(id)
+    else:
+        filename = 'plots/Partial_derivatives-scatter.png'
+    plt.savefig(filename, bbox_inches="tight")
+    plt.show()
+
 
 def get_gradients(model, inputs):
     outputTensor = model.output

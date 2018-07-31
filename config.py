@@ -30,7 +30,8 @@ stock_count_to_pick = 5
 do_redownload_all_data = False
 
 overlapping_windows = True
-limit_windows = 'single'
+# window_limiters = ['single', 'hyper-param-search', 'final-testing', 'no']
+limit_windows = 'hyper-param-search'
 
 fundamental_columns_to_include = [
     'permno',
@@ -118,7 +119,7 @@ active_feature_combinations = [len(full_feature_combination_list) - 1]  # "full"
 # Hyperparameters
 # ----------------------------------
 required_precision = 0.01 # if this is not reached during initial training, the run is declared "failed", saving time
-epochs = 1500
+epochs = 800
 separate_initial_epochs = int(epochs / 10)
 lr = None  # 0.0001
 batch_normalization = False
