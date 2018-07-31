@@ -1,16 +1,37 @@
 import os
 import itertools
+from numpy.random import seed as seed_np
+from tensorflow import set_random_seed as seed_tf
 
+# ----------------------------------
+# Authentication
+# ----------------------------------
 from sensitive_config import quandl_key
 assert quandl_key is not None
 
+# ----------------------------------
+# Reproducibility
+# ----------------------------------
+random_seed = 15
+seed_np(random_seed)
+seed_tf(random_seed)
+
+# ----------------------------------
+# Output for Latex
+# ----------------------------------
 saveResultsForLatex = True
 
+# ----------------------------------
+# Data Preparation
+# ----------------------------------
 start_year = 2010
 end_year = 2016
 stock_count_to_pick = 5
-
 do_redownload_all_data = False
+
+overlapping_windows = True
+limit_windows = 'single'
+
 fundamental_columns_to_include = [
     'permno',
     'public_date',
@@ -24,7 +45,9 @@ fundamental_columns_to_include = [
     'pe_op_dil'
 ]
 
-# Path definition
+# ----------------------------------
+# Local file paths
+# ----------------------------------
 if os.path.isdir('D:/'):
 	rootpath = "D:\\AlgoTradingData\\"
 else:
@@ -33,7 +56,7 @@ else:
 paths = {}
 paths['data_for_latex'] = rootpath + "data_for_latex.h5"
 
-paths['options_for_ann'] = rootpath + "options_for_ann_short.h5"
+paths['options_for_ann'] = rootpath + "options_for_ann.h5"
 paths['weights'] = rootpath + "weights.h5"
 paths['neural_net_output'] = rootpath + "ANN-output.h5"
 paths['model_overfit'] = rootpath + "overfit_model.h5"
@@ -56,9 +79,9 @@ paths['options'] = []
 for y in range(1996, 2017):
     paths['options'].append(rootpath + "OptionsData\\rawopt_" + str(y) + "AllIndices.csv")
 
-seed = 22
-required_precision = 0.01
-
+# ----------------------------------
+# Feature Selection
+# ----------------------------------
 ff_dummies = ['ff_ind_{}'.format(i) for i in range(49)]
 feature_combinations = {
     0: ['days', 'moneyness'],
@@ -86,6 +109,15 @@ for i in range(len(optional_features) + 1):
             feature_selection = mandatory_features + list(tuple)
             full_feature_combination_list.append(feature_selection)
 
+# active_feature_combinations = list(feature_combinations.keys())
+# active_feature_combinations = list(range(len(full_feature_combination_list)))   # all possible combinations
+# active_feature_combinations = [0, len(full_feature_combination_list)-1]         # every and nothing
+active_feature_combinations = [len(full_feature_combination_list) - 1]  # "full" model only
+
+# ----------------------------------
+# Hyperparameters
+# ----------------------------------
+required_precision = 0.01 # if this is not reached during initial training, the run is declared "failed", saving time
 epochs = 1500
 separate_initial_epochs = int(epochs / 10)
 lr = None  # 0.0001
@@ -98,14 +130,10 @@ activations = ['relu']  # 'tanh'
 number_of_nodes = [250]
 number_of_layers = [5]
 optimizers = ['adam']
-include_synthetic_datas = [True, False]
-dropout_rates = [0.1, 0.0]
+include_synthetic_datas = [True]
+dropout_rates = [0.1]
 batch_sizes = [200]  # 100,
 normalizations = ['mmscaler']  # 'no', 'rscaler', 'sscaler',
-# active_feature_combinations = list(feature_combinations.keys())
-# active_feature_combinations = list(range(len(full_feature_combination_list)))   # all possible combinations
-# active_feature_combinations = [0, len(full_feature_combination_list)-1]         # every and nothing
-active_feature_combinations = [len(full_feature_combination_list) - 1]  # "full" model only
 
 settings_list = [
     activations,
@@ -119,21 +147,6 @@ settings_list = [
     active_feature_combinations
 ]
 
-# stock_list = ['some stock', 'other_stock']
-# date_tuple_list = [('start1', 'middle1', 'end1'), ('start2', 'middle2', 'end2')]
-stock_list = [10137]
-date_tuple_list = [('2010-01-01', '2010-06-30', '2010-12-31')]
-
-windows_list = [
-    stock_list,
-    date_tuple_list,
-    list(range(identical_reruns))
-]
-
 settings_combi_count = 1
 for setting_options in settings_list:
     settings_combi_count *= len(setting_options)
-
-window_combi_count = len(stock_list)*len(date_tuple_list)
-
-plottype = 'scatter'

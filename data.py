@@ -1,29 +1,69 @@
 import pandas as pd
 
-from config import paths
+from config import (
+    paths,
+    start_year,
+    end_year,
+    identical_reruns,
+    overlapping_windows,
+    limit_windows
+)
+
+with pd.HDFStore(paths['options_for_ann']) as store:
+    # train = store['train']
+    # validate = store['validate']
+    # test = store['test']
+    # single_stock = store['single']
+    data = store['data']
+    synth = store['synthetic']
+    availability_summary = store['availability_summary']
 
 
-store = pd.HDFStore(paths['options_for_ann'])
-train = store['train']
-validate = store['validate']
-test = store['test']
-single_stock = store['single']
-synth = store['synthetic']
-store.close()
+selected_stocks = list(availability_summary.index)
+some_stock = selected_stocks[2]
 
-train.days = train.days / 365
-validate.days = validate.days / 365
-test.days = test.days / 365
-single_stock.days = single_stock.days / 365
+date_tuple_list = []
+for y in range(start_year, end_year):
+    start = '{}-01-01'.format(y)
+    mid = '{}-07-01'.format(y)
+    end = '{}-01-01'.format(y+1)
+    date_tuple_list.append((start, mid, end))
 
-#synth.loc[:,[c for c in synth.columns if c != 'impl_volatility']].isna().any().any()
+    if overlapping_windows:
+        start = '{}-07-01'.format(y)
+        mid = '{}-01-01'.format(y+1)
+        end = '{}-07-01'.format(y+1)
+        date_tuple_list.append((start, mid, end))
 
-#some_stocks = ['10107', '81774', '14542']
-some_stocks = [10104, 10107, 10137, 10138, 10299, 10516, 11081, 11552, 11600, 11674]
-some_stock = some_stocks[2]
-# 10137 works well enough
+if limit_windows == 'single':
+    windows_list = [
+        selected_stocks[0:1],
+        date_tuple_list[0:1],
+        list(range(identical_reruns))
+    ]
+elif limit_windows == 'hyper-param-search':
+    windows_list = [
+        selected_stocks,
+        date_tuple_list[0:1],
+        list(range(identical_reruns))
+    ]
+elif limit_windows == 'final-testing':
+    windows_list = [
+        selected_stocks,
+        date_tuple_list[1:],
+        list(range(identical_reruns))
+    ]
+elif limit_windows is None or limit_windows == 'no':
+    windows_list = [
+        selected_stocks,
+        date_tuple_list,
+        list(range(identical_reruns))
+    ]
+else:
+    raise ValueError
 
-sorted_train = train.sort_index()
+window_combi_count = len(windows_list[0])*len(windows_list[1])
+
 
 
 '''
@@ -59,12 +99,4 @@ sorted_train = train.sort_index()
         'predicted_price',
         'predicted_hedge',
         'implied_delta'
-'''
-
-
-'''
-single_stock = sorted_train.loc[(slice(None), some_stock),:]
-
-some_day = single_stock.iloc[-1].name[0]
-single_stock_and_day = sorted_train.loc[(some_day, some_stock),:]
 '''

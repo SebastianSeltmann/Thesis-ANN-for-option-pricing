@@ -5,6 +5,11 @@ import wrds as wrds
 import datetime
 import calendar
 
+from matplotlib import pyplot as plt
+import itertools
+
+import math
+
 from config import (
     paths,
     quandl_key,
@@ -332,15 +337,13 @@ del(ratios_to_merge)
 del(dummies)
 del(idx1)
 del(idx2)
-#del(names)
+del(names)
 
 '''
 print('Computing perfect hedge (with hindsight)')
 merged.loc[:, 'perfect_hedge_1'] = -( merged.loc[:, 'prc'] - merged.loc[:, 'prc_shifted_1']
                                       ) / (
                                     merged.loc[:, 'option_price'] - merged.loc[:, 'option_price_shifted_1'])
-
-
 
 merged = merged.replace([np.inf, -np.inf], 0) # Sketchy
 
@@ -352,24 +355,23 @@ merged.loc[:, 'P_value_change_1'] = (merged.loc[:, 'prc_shifted_1'] - merged.loc
 '''
 
 print('merged.shape: {}'.format(merged.shape))
-
-print('Determining stocks with most consistent data availability')
+print('Selecting stocks with most consistent data availability')
 #names = train.reset_index().loc[:, ['permno', 'comnam', 'ticker']].drop_duplicates()
 
 def year_and_stock(index):
     date, stock = index
-    return '{} {}'.format(date.year, stock)
+    return '{}-{} {}'.format(date.year, math.ceil(date.month/6)*6, stock)
+
 
 counts_with_bad_index = merged.strike_price.groupby(year_and_stock).count()
 index_df = pd.DataFrame(counts_with_bad_index.index.str.split().tolist(), columns=['year', 'permno'])
-counts = pd.DataFrame(dict(year=index_df.year, permno=index_df.stock, count=counts_with_bad_index.values))
-counts.stock = pd.to_numeric(counts.stock)
+counts = pd.DataFrame(dict(year=index_df.year, permno=index_df.permno, count=counts_with_bad_index.values))
+counts.permno = pd.to_numeric(counts.permno)
 
-named_counts = pd.merge(counts, names, left_on='permno', right_on='permno')
-named_counts.drop(['permno'], axis=1, inplace=True)
+named_counts = pd.merge(counts, last_names, left_on='permno', right_on='permno')
 
-stocks_occur_counts = named_counts.stock.value_counts()
-omnipresent_stocks = stocks_occur_counts.loc[stocks_occur_counts == end_year - start_year].index  # occurs every year
+stocks_occur_counts = named_counts.permno.value_counts()
+omnipresent_stocks = stocks_occur_counts.loc[stocks_occur_counts == 2*(end_year - start_year)].index  # occurs every year
 idx = named_counts.permno.isin(omnipresent_stocks)
 named_counts_omnipresent = named_counts.loc[idx]
 
@@ -377,14 +379,66 @@ stocks_weakest_years = named_counts_omnipresent.groupby(['permno']).min()
 most_consistent_stocks = list(stocks_weakest_years.sort_values(['count']).tail(stock_count_to_pick).index)
 idx = named_counts.permno.isin(most_consistent_stocks)
 named_counts_most_consistent = named_counts_omnipresent.loc[idx]
-print(named_counts_most_consistent.groupby('permno').min()[['count', 'ticker', 'comnam']])
+availability_summary = named_counts_most_consistent.groupby('permno').min()[['count', 'ticker', 'comnam']]
+print(availability_summary)
 
+print('Plotting available data per selected stock and year')
+pivotted = named_counts_most_consistent.pivot(index='ticker', columns='year', values='count')
+plt.figure()
+fig, ax1 = plt.subplots(1,1)
+cax = ax1.imshow(pivotted, cmap='hot')
+#fig.set_xticks((pivotted.columns), list(pivotted.columns))
+ax1.set_xticks(np.arange(len(pivotted.columns)))
+ax1.set_yticks(np.arange(len(pivotted.index)))
+ax1.set_xticklabels(list(pivotted.columns), rotation=45, ha="right")
+ax1.set_yticklabels(list(pivotted.index))
+ax1.set_title('Number of available datapoints (option quotes)\nfor each window before downsampling')
+fig.colorbar(cax)
+plt.savefig('plots/availability.png', bbox_inches="tight")
+plt.show()
 
+downsampling_n = availability_summary['count'].min()
+print('Sampling each window down to equal size: {}'.format(downsampling_n))
+selected_stocks = availability_summary.index
+selected_stock_data = merged.loc[merged.index.get_level_values(1).isin(selected_stocks)]
+del(merged)
+
+time_windows = []
+for y in range(start_year, end_year):
+    start = pd.to_datetime('{}-01-01'.format(y))
+    mid =  pd.to_datetime('{}-07-01'.format(y))
+    end =  pd.to_datetime('{}-01-01'.format(y+1))
+    time_windows.append((start, mid))
+    time_windows.append((mid, end))
+
+ranges = [list(selected_stocks), time_windows]
+
+time_index = selected_stock_data.index.get_level_values(0)
+stock_index = selected_stock_data.index.get_level_values(1)
+
+mi = pd.MultiIndex(levels=[[],[]], labels=[[],[]], names=['date', 'permno'])
+downsampled_df = pd.DataFrame(columns=selected_stock_data.columns, index=mi)
+
+for window in itertools.product(*ranges):
+    stock, time_window = window
+    start, end = time_window
+    idx = stock_index == stock
+    idx &= time_index >= start
+    idx &= time_index < end
+    df = selected_stock_data.loc[idx]
+    sampled_df = df.sample(downsampling_n, random_state=np.random.RandomState())
+    downsampled_df = downsampled_df.append(sampled_df)
+
+print('Sorting index')
+data = downsampled_df.sort_index()
+
+print('data.shape: {}'.format(data.shape))
+
+'''
 print('Splitting data into train, validation & test sets')
 train, validate, test = np.split(merged.sample(frac=1, random_state=69777), [int(.6 * len(merged)), int(.8 * len(merged))])
-
 print('{} - {} - {}'.format(train.shape[0], validate.shape[0], test.shape[0]))
-
+'''
 
 def generate_synthetic_data(option_type='call'):
     '''
@@ -424,27 +478,27 @@ def generate_synthetic_data(option_type='call'):
 
 
     means = {
-        'returns': train.returns.mean(),
-        'v110': train.v110.mean(),
-        'v60': train.v60.mean(),
-        'v20': train.v20.mean(),
-        'v5': train.v5.mean(),
-        'r': train.r.mean(),
-        'vix': train.vix.mean(),
+        'returns': data.returns.mean(),
+        'v110': data.v110.mean(),
+        'v60': data.v60.mean(),
+        'v20': data.v20.mean(),
+        'v5': data.v5.mean(),
+        'r': data.r.mean(),
+        'vix': data.vix.mean(),
     }
 
     stds = {
-        'returns': train.returns.std(),
-        'v110': train.v110.std(),
-        'v60': train.v60.std(),
-        'v20': train.v20.std(),
-        'v5': train.v5.std(),
-        'r': train.r.std(),
-        'vix': train.vix.std(),
+        'returns': data.returns.std(),
+        'v110': data.v110.std(),
+        'v60': data.v60.std(),
+        'v20': data.v20.std(),
+        'v5': data.v5.std(),
+        'r': data.r.std(),
+        'vix': data.vix.std(),
     }
     for column in additional_columns:
-        means[column] = train[column].mean()
-        stds[column] = train[column].std()
+        means[column] = data[column].mean()
+        stds[column] = data[column].std()
 
     complete_dummy_list = ['ff_ind_{}'.format(i) for i in range(49)]
 
@@ -537,7 +591,6 @@ def generate_synthetic_data(option_type='call'):
     print('Generating synthetic contracts at boundary condition S >> K')
     K = 100
     for S in range(int(K * 2.5), int(K * 4), 50):
-        print('{} - {}'.format(S, S/K))
         for days in range(2, 60):
             days = days / 365
             impl_volatility = None
@@ -584,7 +637,7 @@ def generate_synthetic_data(option_type='call'):
 
 synth_df = generate_synthetic_data()
 
-
+'''
 print('Singling out some stock')
 some_stocks = merged.index.levels[1][0:10]
 print(some_stocks)
@@ -595,17 +648,18 @@ single_stock = merged.loc[(slice(None), some_stock),:]
 
 # single_train, single_validate, single_test = np.split(single_stock.sample(frac=1, random_state=69777), [int(.8 * len(single_stock)), int(.9 * len(single_stock))])
 
-
+'''
 print('Storing result on disc')
-store = pd.HDFStore(paths['options_for_ann'])
-# store['options_for_ann'] = merged
-# merged = store['options_for_ann']
-store['train'] = train
-store['validate'] = validate
-store['test'] = test
-store['single'] = single_stock
-store['synthetic'] = synth_df
-store.close()
+with pd.HDFStore(paths['options_for_ann']) as store:
+    # store['options_for_ann'] = merged
+    # merged = store['options_for_ann']
+    # store['train'] = train
+    # store['validate'] = validate
+    # store['test'] = test
+    # store['single'] = single_stock
+    store['data'] = data
+    store['synthetic'] = synth_df
+    store['availability_summary'] = availability_summary
 
 print('Done')
 

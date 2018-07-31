@@ -9,8 +9,6 @@ import tensorflow as tf
 from keras import backend as K
 from keras.callbacks import TensorBoard
 
-from numpy.random import seed
-from tensorflow import set_random_seed
 
 from plotly.offline import download_plotlyjs, init_notebook_mode, plot, iplot
 import plotly.graph_objs as go
@@ -18,14 +16,18 @@ from matplotlib import pyplot as plt
 
 from config import paths, required_precision
 
+'''
+sorted_train,
+train,
+validate,
+some_stocks,
+'''
 from data import (
-    sorted_train,
-    train,
-    validate,
+    data as dataset,
     some_stock,
-    some_stocks,
     synth
 )
+
 from models import (
     black_scholes_price,
     rational_multi_model
@@ -41,15 +43,6 @@ def timeit(method):
     return timed
 
 
-def run_identity_predictor(filename='identity'):
-    sample = get_data_for_single_stock_and_day(sorted_train, some_stock, range(-1, -71, -1))
-    validate = get_data_for_single_stock_and_day(sorted_train, some_stock, range(-71, -150, -1))
-
-def seed_rng(i=1):
-    seed(i)
-    set_random_seed(i)
-    np.random.seed(seed)
-
 def get_data_for_single_stock_and_day(sorted_set, stock, daterange):
     single_stock = sorted_set.loc[(slice(None), stock),:]
     single_stock.reset_index(inplace=True) # Otherwise the full index of sorted_set remains
@@ -63,110 +56,21 @@ def get_data_for_single_stock_and_day(sorted_set, stock, daterange):
     single_stock_multiple_days_single_df = sorted_set.loc[(days, stock),:]
     return single_stock_multiple_days_single_df
 
-
-def prepare_data_for_regular_approach():
-    X_train = train[['days', 'moneyness']]
-    Y_train = train[['scaled_option_price']]
-    X_val = validate[['days', 'moneyness']]
-    Y_val = validate[['scaled_option_price']]
-
-    only_at_the_money_options = False
-    if only_at_the_money_options:
-        t_at_the_money = (train.moneyness > 0.9) & (train.moneyness < 1.1)
-        v_at_the_money = (validate.moneyness > 0.9) & (validate.moneyness < 1.1)
-        X_train = X_train[t_at_the_money]
-        Y_train = Y_train[t_at_the_money]
-
-        X_val = X_val[v_at_the_money]
-        Y_val = Y_val[v_at_the_money]
-
-    data = X_train, Y_train, X_val, Y_val
-    return data
-
-
-def prepare_data_for_full_approach(min, max, nother_max=None, inSample=False, input_columns=['days', 'moneyness'],
-                                   output_columns=['scaled_option_price']):
-    train = get_data_for_single_stock_and_day(sorted_train, some_stock, range(min, max, -1))
-    if nother_max:
-        validate = get_data_for_single_stock_and_day(sorted_train, some_stock, range(max, nother_max, -1))
-    else:
-        validate = get_data_for_single_stock_and_day(sorted_train, some_stock, [max])
-    X_train = train[input_columns]
-    Y_train = train[output_columns]
-    X_val = validate[input_columns]
-    Y_val = validate[output_columns]
-
-    if inSample:
-        data = X_train, Y_train, X_train, Y_train
-    else:
-        data = X_train, Y_train, X_val, Y_val
-    return data
-
-
-def prepare_data_for_rational_approach(min, max, nother_max=None, inSample=False):
-    train = get_data_for_single_stock_and_day(sorted_train, some_stock, range(min, max, -1))
-    if nother_max:
-        validate = get_data_for_single_stock_and_day(sorted_train, some_stock, range(max, nother_max, -1))
-    else:
-        validate = get_data_for_single_stock_and_day(sorted_train, some_stock, [max])
-    X_train = train[['days', 'moneyness']]
-    Y_train = train[['scaled_option_price']]
-    X_val = validate[['days', 'moneyness']]
-    Y_val = validate[['scaled_option_price']]
-
-    if inSample:
-        data = X_train, Y_train, X_train, Y_train
-    else:
-        data = X_train, Y_train, X_val, Y_val
-    return data
-
-
-def prepare_data_for_full_approach_multistock(start, end_train_start_val, end_val,
-                                              inSample=False,
-                                              input_columns=['days', 'moneyness'],
-                                              output_columns=['scaled_option_price']):
-    daterange_train = range(start, end_train_start_val, -1)
-    daterange_val = range(end_train_start_val, end_val, -1)
-
-    days_train = []
-    days_val = []
-    for i in daterange_train:
-        day = sorted_train.index.levels[0][i]
-        days_train.append(day)
-    for i in daterange_val:
-        day = sorted_train.index.levels[0][i]
-        days_val.append(day)
-    train = sorted_train.loc[(days_train, slice(None)), :]
-    validate = sorted_train.loc[(days_val, slice(None)), :]
-
-    X_train = train[input_columns]
-    Y_train = train[output_columns]
-    X_val = validate[input_columns]
-    Y_val = validate[output_columns]
-
-    if inSample:
-        data = X_train, Y_train, X_train, Y_train
-    else:
-        data = X_train, Y_train, X_val, Y_val
-
-    return data
-
-
-def prepare_data_for_full_approach_proper_time(start_date='2010-01-01',
-                                               end_train_start_val_date='2010-06-30',
-                                               end_val_date='2010-12-31',
-                                               input_columns=['days', 'moneyness'],
-                                               output_columns=['scaled_option_price'],
-                                               stock=some_stock):
-    dates = sorted_train.index.get_level_values(0)
-    stocks = sorted_train.index.get_level_values(1)
+def get_data_window(start_date='2010-01-01',
+                    end_train_start_val_date='2010-06-30',
+                    end_val_date='2010-12-31',
+                    input_columns=['days', 'moneyness'],
+                    output_columns=['scaled_option_price'],
+                    stock=some_stock):
+    dates = dataset.index.get_level_values(0)
+    stocks = dataset.index.get_level_values(1)
 
     idx_stock = stocks == stock
     idx_train = (dates >= start_date) & (dates < end_train_start_val_date)
     idx_validate = (dates >= end_train_start_val_date) & (end_train_start_val_date < end_val_date)
 
-    train = sorted_train.loc[idx_train & idx_stock]
-    validate = sorted_train.loc[idx_validate & idx_stock]
+    train = dataset.loc[idx_train & idx_stock]
+    validate = dataset.loc[idx_validate & idx_stock]
 
     X_train = train[input_columns]
     Y_train = train[output_columns]
@@ -193,14 +97,14 @@ def get_data_package(model, columns, include_synth, normalize,
         output_columns = ['scaled_option_price']
     ref_columns = ['prc', 'option_price', 'strike_price', 'prc_shifted_1', 'option_price_shifted_1']
 
-    data = prepare_data_for_full_approach_proper_time(
+    data = get_data_window(
         input_columns=columns,
         output_columns=output_columns,
         start_date=start_date,
         end_train_start_val_date=end_train_start_val_date,
         end_val_date=end_val_date,
         stock=some_stock)
-    ref_data = prepare_data_for_full_approach_proper_time(
+    ref_data = get_data_window(
         input_columns=ref_columns,
         output_columns=output_columns,
         start_date=start_date,
@@ -730,6 +634,7 @@ def get_and_plot(setNames, variable='error'):
 
 
 def run_black_scholes(inSample=False, filename='BS_outSample'):
+    raise NotImplementedError
     sample = get_data_for_single_stock_and_day(sorted_train, some_stock, range(-1, -71, -1))
     #validate = get_sample(sorted_train, some_stock, range(-71, -150, -1))
     validate = get_data_for_single_stock_and_day(sorted_train, some_stocks[1], range(-71, -150, -1))

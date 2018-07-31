@@ -35,7 +35,6 @@ from time import time
 from config import (
     paths,
     required_precision,
-    seed,
     settings_combi_count,
     active_feature_combinations,
     identical_reruns,
@@ -46,12 +45,13 @@ from config import (
     separate_initial_epochs,
     lr,
     epochs,
-    plottype,
-    windows_list,
-    window_combi_count,
     saveResultsForLatex
 )
 from models import (
+    full_model,
+    multitask_model,
+    black_scholes_price,
+
     stupid_model,
     deep_model,
     adding_sample_model,
@@ -59,16 +59,12 @@ from models import (
     rational_model_v2,
     rational_multi_model,
     custom_model,
-    full_model,
-    multitask_model,
 
-    black_scholes_price
 )
 from actions import (
-    seed_rng,
     get_data_for_single_stock_and_day,
-    prepare_data_for_rational_approach,
-    prepare_data_for_full_approach,
+    # prepare_data_for_rational_approach,
+    # prepare_data_for_full_approach,
     run,
     run_and_store_ANN,
     get_input_gradients_at_point,
@@ -84,6 +80,10 @@ from actions import (
     get_SSD,
     get_gradients,
     boxplot_SSD_distribution
+)
+from data import (
+    windows_list,
+    window_combi_count,
 )
 '''
 from data import (
@@ -144,8 +144,6 @@ def perform_experiment():
                      identical_reruns,
                      settings_combi_count*len(active_feature_combinations)*window_combi_count*identical_reruns
                      ))
-
-
 
     i = 0
     for settings in itertools.product(*settings_list): # equivalent to a bunch of nested for-loops
@@ -302,16 +300,15 @@ def perform_experiment():
             # plt.figure()
             # plt.figure(figsize=(6, 12))
             number_runs_in_same_plot = window_combi_count*identical_reruns
-            if plottype is not None:
-                for points in [X_train, X_val]:
-                    gradients = get_gradients(model, points)
+            for points in [X_train, X_val]:
+                gradients = get_gradients(model, points)
 
-                    for i, var in enumerate(points.columns):
-                        #plt.subplot(6, 2, i + 1)
-                        axes[i].title(var)
-                        x = np.array(points.iloc[:, i])
-                        y = gradients[:, i]
-                        axes[i].scatter(x, y, alpha=len(X_train) * 0.1 / 600 / number_runs_in_same_plot)  # alpha=0.01
+                for i, var in enumerate(points.columns):
+                    #plt.subplot(6, 2, i + 1)
+                    axes[i].title(var)
+                    x = np.array(points.iloc[:, i])
+                    y = gradients[:, i]
+                    axes[i].scatter(x, y, alpha=len(X_train) * 0.1 / 600 / number_runs_in_same_plot)  # alpha=0.01
 
             if interrupt_flag:
                 break
