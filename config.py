@@ -2,6 +2,8 @@ import os
 import itertools
 from numpy.random import seed as seed_np
 from tensorflow import set_random_seed as seed_tf
+from time import time
+import datetime
 
 # ----------------------------------
 # Authentication
@@ -12,7 +14,7 @@ assert quandl_key is not None
 # ----------------------------------
 # Reproducibility
 # ----------------------------------
-random_seed = 15
+random_seed = time()
 seed_np(random_seed)
 seed_tf(random_seed)
 
@@ -67,7 +69,10 @@ paths['model_deep'] = rootpath + "deep_model.h5"
 paths['model_best'] = rootpath + "model_currently_best.h5"
 paths['tensorboard'] = rootpath + "tensorboard-logs\\"
 paths['results-excel'] = 'results_excel.xlsx'
-paths['all_models'] = rootpath + "all_models\\"
+paths['results-excel-BS'] = 'results_excel-BS.xlsx'
+
+paths['gradients_data'] = 'gradients_data.h5'
+paths['all_models'] = rootpath + 'all_models\\{}\\{:%Y-%m-%d_%H-%M}'.format(datetime.now())
 
 
 paths['prices_raw'] = rootpath + "Data[IDs, constituents, prices].h5"
@@ -152,3 +157,9 @@ settings_list = [
 settings_combi_count = 1
 for setting_options in settings_list:
     settings_combi_count *= len(setting_options)
+
+# ----------------------------------
+# Benchmark
+# ----------------------------------
+run_BS_as_well = True
+vol_proxy = 'hist_realized'

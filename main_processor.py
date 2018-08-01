@@ -45,7 +45,9 @@ from config import (
     separate_initial_epochs,
     lr,
     epochs,
-    saveResultsForLatex
+    saveResultsForLatex,
+    run_BS_as_well,
+    vol_proxy
 )
 from models import (
     full_model,
@@ -107,10 +109,8 @@ def perform_experiment():
                'batch_normalization', 'loss', 'loss_oos', 'used_synth', 'normalize', 'dropout', 'batch_size',
                'failed', 'loss_mean', 'loss_std', 'val_loss_mean', 'val_loss_std', 'stock', 'dt_start', 'dt_middle',
                'dt_end', 'duration', 'N_train', 'N_val']
-    cols = {}
 
-    for watch in watches:
-        cols[watch] = []
+    cols = {col: [] for col in watches}
 
     interrupt_flag = False
 
@@ -150,7 +150,6 @@ def perform_experiment():
                                         int(dropout_rate*10), int(include_synthetic_data),
                                         normalization, batch_size)
 
-
             if multi_target:
                 model_name = 'multit_'+model_name
                 print(model_name, end=': ')
@@ -173,7 +172,7 @@ def perform_experiment():
             # when rerun_id is 0, that means we just switched to a new stock or date, or setting
             # that is when we need to get the data again
             if rerun_id == 0:
-                # data_package = get_data_package(model, columns=used_features, include_synth=include_synthetic_data, normalize=normalization)
+
                 data_package = get_data_package(
                     model=model,
                     columns=used_features,
@@ -189,11 +188,14 @@ def perform_experiment():
 
             if lr is not None:
                 K.set_value(model.optimizer.lr, lr)
-            model_start_time = time()
+
+            starting_time = datetime.now()
+            starting_time_str = '{:%Y-%m-%d_%H-%M}'.format(starting_time)
+
             _, initial_loss, _ = run_and_store_ANN(model=model, inSample=True, model_name='i_'+model_name+'_inSample',
                               nb_epochs=separate_initial_epochs, reset='yes', columns=used_features,
                               include_synth=include_synthetic_data, normalize=normalization, batch_size=batch_size,
-                                                   data_package=data_package)
+                                                   data_package=data_package, starting_time_str=starting_time_str)
 
             if initial_loss > required_precision:
                 print('FAILED', end=' ')
@@ -208,13 +210,13 @@ def perform_experiment():
                                             columns=used_features, get_deltas=True,
                                             include_synth=include_synthetic_data,
                                             normalize=normalization, batch_size=batch_size,
-                                                        data_package=data_package)
+                                                        data_package=data_package, starting_time_str=starting_time_str)
 
                 _, loss_oos, _ = run_and_store_ANN(model=model, inSample=False,
                                                 model_name=model_name+'_outSample', reset='reuse',
                                                 columns=used_features, get_deltas=True,
                                                 normalize=normalization, batch_size=batch_size,
-                                                   data_package=data_package)
+                                                   data_package=data_package, starting_time_str=starting_time_str)
 
 
                 (last_losses_mean, last_losses_std, last_val_losses_mean, last_val_losses_std) = loss_tuple
@@ -227,7 +229,7 @@ def perform_experiment():
                 SSD_distribution_train.append(SSD_train)
                 SSD_distribution_val.append(SSD_val)
 
-            model_end_time = time()
+            model_end_time = datetime.now()
 
             feature_string = '_'.join(used_features)
             pos_fff = feature_string.find("_ff_ind")
@@ -238,7 +240,7 @@ def perform_experiment():
 
             cols['model_name'].append(model_name)
             cols['time'].append(datetime.now())
-            cols['duration'].append(model_end_time - model_start_time)
+            cols['duration'].append(model_end_time - starting_time)
             cols['N_train'].append(N_train)
             cols['N_val'].append(N_val)
 
@@ -272,11 +274,43 @@ def perform_experiment():
 
             print(loss)
 
-            filename = '{}_{:%Y-%m-%d_%H-%M}.h5'.format(model_name, datetime.now())
+            #filename = '{}_{:%Y-%m-%d_%H-%M}.h5'.format(model_name, datetime.now())
+            filename = model_name + '_' + starting_time_str + '.h5'
             model.save(paths['all_models'] + filename)
 
             # if rerun_id == 0:
             #     scatterplot_PAD(model, [X_train, X_val], i)
+            collect_gradients_data = True
+            if collect_gradients_data:
+                gradient_df_columns = ['model_name', 'time', 'sample' 'feature', 'feature_value', 'gradient']
+                grad_data = {key: [] for key in gradient_df_columns}
+
+                sampling_dict = dict(train=X_train, test=X_val)
+                for sample_key, points in sampling_dict.items:
+
+                    gradients = get_gradients(model, points)
+                    for i, feature_name in enumerate(points.columns):
+                        for value, gradient in zip(points.iloc[:, i], gradients[:, i]):
+                            grad_data['model_name'].append(model_name)
+                            grad_data['time'].append(starting_time)
+                            grad_data['sample'].append(sample_key)
+                            grad_data['feature'].append(feature_name)
+                            grad_data['feature_value'].append(value)
+                            grad_data['gradient'].append(gradient)
+
+                        # for i, var in enumerate(points.columns):
+                        #     x = np.array(points.iloc[:, i])
+                        #     y = gradients[:, i]
+
+                gradients_df = pd.DataFrame(grad_data)
+
+                with pd.HDFStore(paths['gradients_data']) as store:
+                    try:
+                        previous_gradients_df = store['gradients_data']
+                        merged_gradients_df = pd.concat([gradients_df, previous_gradients_df])
+                    except:
+                        merged_gradients_df = gradients_df
+                    store['gradients_data'] = merged_gradients_df
 
             if interrupt_flag:
                 break
@@ -304,6 +338,46 @@ def perform_experiment():
     with pd.ExcelWriter(paths['results-excel']) as writer:
         merged_results.to_excel(writer, 'RunData')
         writer.save()
+
+    if run_BS_as_well:
+
+        BS_watches = ['stock', 'dt_start', 'dt_middle', 'dt_end', 'vol_proxy']
+        BS_cols = {col: [] for col in BS_watches}
+
+        j = 0
+        for window in itertools.product(*windows_list):
+            j += 1
+            stock, date_tuple, rerun_id = window
+            dt_start, dt_middle, dt_end = date_tuple
+            data_package = get_data_package(
+                model='BS',
+                columns=['days', 'moneyness', 'impl_volatility', 'v60', 'r'],
+                stock=stock,
+                start_date=dt_start,
+                end_train_start_val_date=dt_middle,
+                end_val_date=dt_end
+            )
+            BS_Error = run_black_scholes(data_package, vol_proxy=vol_proxy)
+
+            BS_cols['stock'] = stock
+            BS_cols['dt_start'] = dt_start
+            BS_cols['dt_middle'] = dt_middle
+            BS_cols['dt_end'] = dt_end
+            BS_cols['vol_proxy'] = vol_proxy
+
+        BS_results_df = pd.DataFrame(BS_cols)
+    try:
+        with pd.ExcelFile(paths['results-excel-BS']) as reader:
+            BS_previous_results = reader.parse("RunData")
+
+        BS_merged_results = pd.concat([BS_results_df, BS_previous_results])
+    except:
+        BS_merged_results = BS_results_df
+
+    with pd.ExcelWriter(paths['results-excel-BS']) as writer:
+        BS_merged_results.to_excel(writer, 'RunData')
+        writer.save()
+
 
     print('Done')
     if not cols['failed'][-1]:

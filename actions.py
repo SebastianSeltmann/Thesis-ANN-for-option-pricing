@@ -158,7 +158,7 @@ def get_data_package(model, columns=['days', 'moneyness'], include_synth=False, 
 
 def run_and_store_ANN(model, inSample=False, reset='yes', nb_epochs=5, data_package=None, verbose=0, model_name='custom',
                       columns=['days', 'moneyness'], get_deltas=False, include_synth=False, normalize='no',
-                      batch_size=25):
+                      batch_size=25, starting_time_str=None):
     if data_package is None:
         data, X_synth, Y_synth, ref_data_tuple, scaler_X, scaler_Y = get_data_package(model, columns, include_synth, normalize)
     else:
@@ -177,7 +177,8 @@ def run_and_store_ANN(model, inSample=False, reset='yes', nb_epochs=5, data_pack
                                       verbose=verbose,
                                       model_name=model_name,
                                       inSample=inSample,
-                                      batch_size=batch_size)
+                                      batch_size=batch_size,
+                                      starting_time_str=starting_time_str)
     last_loss = loss[-1]
     if history is not None:
         loss = history.history['loss']
@@ -253,29 +254,30 @@ def run_and_store_ANN(model, inSample=False, reset='yes', nb_epochs=5, data_pack
     sample["scaled_option_price"] = target.scaled_option_price
     sample["error"] = sample.scaled_option_price - sample.prediction
 
-
-    global model_losses_new
-    store = pd.HDFStore(paths['neural_net_output'])
-    try:
-        if '/model_architectures' in store.keys():
-            model_architectures = store['/model_architectures']
-        else:
-            model_architectures = pd.DataFrame(columns=['models'])
-        if not model_name.startswith('rational_'):
-            model_architectures.loc[model_name] = model.to_json()
-        store['/model_architectures'] = model_architectures
-        if reset != 'reuse':
-            lossDF = pd.DataFrame(loss, columns=[model_name])
-            if '/model_losses' in store.keys():
-                model_losses = store['/model_losses']
-                model_losses_new = lossDF.combine_first(model_losses)
+    with pd.HDFStore(paths['neural_net_output']) as store:
+        store_model_architecture = False
+        store_model_losses_throughout_training = False
+        store_primitive_performance_metrics = True
+        if store_model_architecture:
+            if '/model_architectures' in store.keys():
+                model_architectures = store['/model_architectures']
             else:
-                model_losses_new = lossDF
-            store['/model_losses'] = model_losses_new
+                model_architectures = pd.DataFrame(columns=['models'])
+            if not model_name.startswith('rational_'):
+                model_architectures.loc[model_name] = model.to_json()
+            store['/model_architectures'] = model_architectures
+        if store_model_losses_throughout_training:
+            if reset != 'reuse':
+                lossDF = pd.DataFrame(loss, columns=[model_name])
+                if '/model_losses' in store.keys():
+                    model_losses = store['/model_losses']
+                    model_losses_new = lossDF.combine_first(model_losses)
+                else:
+                    model_losses_new = lossDF
+                store['/model_losses'] = model_losses_new
+        if store_primitive_performance_metrics:
+            store[model_name] = sample
 
-        store[model_name] = sample
-    finally:
-        store.close()
     if len(loss)> 0:
         success = loss[-1] < required_precision
     else: success = True
@@ -333,7 +335,8 @@ def run(model,
         verbose=0,
         model_name='',
         inSample=False,
-        batch_size=25
+        batch_size=25,
+        starting_time_str=None
         ):
 
     X_train, Y_train, X_val, Y_val = data
@@ -356,13 +359,15 @@ def run(model,
     global loss, abs_error
     loss = []
     abs_error = []
+    mse = []
     successive_successes_needed = 5
     c = 0
     history = None
     Y_prediction = None
 
     global tensorboard
-    now_str = '{:%Y-%m-%d_%H-%M}'.format(datetime.now())
+    if starting_time_str is None:
+        starting_time_str = '{:%Y-%m-%d_%H-%M}'.format(datetime.now())
     # tensorboard = TensorBoard(log_dir=paths['tensorboard']+now_str)
     '''
     tensorboard = TensorBoard(log_dir="logs/"+model_name+"_"+now_str, histogram_freq=0,
@@ -377,7 +382,7 @@ def run(model,
     # callbacks = [tensorboard]
     '''
     # callbacks = [TensorBoard(log_dir="logs/"+model_name+"_"+now_str, write_graph=True, write_images=True)]
-    callbacks = [TrainValTensorBoard(write_graph=False, log_dir="logs\\{}_{}".format(model_name, now_str))]
+    callbacks = [TrainValTensorBoard(write_graph=False, log_dir="logs\\{}_{}".format(model_name, starting_time_str))]
 
     # validation_data = None
     validation_data = (X_val, Y_val)
@@ -456,6 +461,7 @@ def get_gradients(model, inputs):
     sess = K.get_session()
     gradients_of_individual_inputs = sess.run(gradients, feed_dict={model.input: np.array(inputs)})[0]
     return gradients_of_individual_inputs
+
 
 def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', filename='BS_outSample'):
 
