@@ -62,24 +62,25 @@ from models import (
 
 )
 from actions import (
+    get_data_package,
+    run_and_store_ANN,
     get_data_for_single_stock_and_day,
     # prepare_data_for_rational_approach,
     # prepare_data_for_full_approach,
     run,
-    run_and_store_ANN,
     get_input_gradients_at_point,
     extract_deltas,
+    run_black_scholes,
+    get_gradients,
+)
+from plotting_actions import (
+    vol_surface_plot,
+    get_and_plot,
+    get_SSD,
+    boxplot_SSD_distribution,
     moving_average,
     plot_error_over_epochs,
     plot_surface_of_ANN,
-    vol_surface_plot,
-    get_and_plot,
-    run_black_scholes,
-    follow_rational_approach,
-    get_data_package,
-    get_SSD,
-    get_gradients,
-    boxplot_SSD_distribution,
     scatterplot_PAD
 )
 from data import (
@@ -274,15 +275,15 @@ def perform_experiment():
             filename = '{}_{:%Y-%m-%d_%H-%M}.h5'.format(model_name, datetime.now())
             model.save(paths['all_models'] + filename)
 
-            if rerun_id == 0:
-                scatterplot_PAD(model, [X_train, X_val], i)
+            # if rerun_id == 0:
+            #     scatterplot_PAD(model, [X_train, X_val], i)
 
             if interrupt_flag:
                 break
 
         if j >= 5:
-            boxplot_SSD_distribution(SSD_distribution_train, used_features, 'Training Data')
-            boxplot_SSD_distribution(SSD_distribution_val, used_features, 'Validation Data')
+            boxplot_SSD_distribution(SSD_distribution_train, used_features, 'Training Data\n'+model_name)
+            boxplot_SSD_distribution(SSD_distribution_val, used_features, 'Validation Data\n'+model_name)
 
             if saveResultsForLatex:
                 SSDD_df = pd.DataFrame(SSD_distribution_val, columns=used_features)
