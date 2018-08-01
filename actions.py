@@ -29,8 +29,7 @@ from data import (
 )
 
 from models import (
-    black_scholes_price,
-    rational_multi_model
+    black_scholes_price
 )
 
 def timeit(method):
@@ -746,41 +745,3 @@ def run_black_scholes(inSample=False, filename='BS_outSample'):
     store[filename] = validate
     store.close()
     return
-
-
-def follow_rational_approach(single_stock):
-
-    single_stock = single_stock[['days', 'moneyness', 'scaled_option_price']]
-
-    s = 0
-    days = []
-    for i in range(s,s+6):
-        day = single_stock.index.levels[0][i]
-        days.append(single_stock.index.levels[0][i])
-    test_day = days.pop()
-    train = single_stock.loc[days,:]
-    validate = single_stock.loc[test_day,:]
-
-
-    X_train = train[['days', 'moneyness']]
-    Y_train = train[['scaled_option_price']]
-    X_val = validate[['days', 'moneyness']]
-    Y_val = validate[['scaled_option_price']]
-
-    data = X_train, Y_train, X_val, Y_val
-
-    model = rational_multi_model(J=5, I=9, K=5)
-
-    run_and_store_ANN(model=model, inSample=True, filename='rational_multi_model_inSample', nb_epochs=2000,
-                      reset='yes', data=data)
-    run_and_store_ANN(model=model, inSample=False, filename='rational_multi_model_outSample',
-                      reset='reuse', data=data)
-
-    get_and_plot(['rational_multi_model_inSample', 'rational_multi_model_outSample'])
-    get_and_plot(['rational_multi_model_inSample', 'rational_multi_model_outSample'], variable='prediction')
-    get_and_plot(['rational_multi_model_inSample'], variable='scaled_option_price')
-
-    '''
-    run_and_store_ANN(model=model, inSample=True, filename='rational_multi_model_inSample', nb_epochs=1000,
-                      reset='continue', data=data)
-    '''
