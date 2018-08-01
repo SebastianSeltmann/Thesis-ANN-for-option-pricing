@@ -26,6 +26,7 @@ saveResultsForLatex = True
 # ----------------------------------
 start_year = 2010
 end_year = 2016
+annualization = 252
 stock_count_to_pick = 5
 do_redownload_all_data = False
 
@@ -128,12 +129,12 @@ multi_target = False
 identical_reruns = 1
 
 activations = ['relu']  # 'tanh'
-number_of_nodes = [250]
-number_of_layers = [5]
+number_of_nodes = [100, 250]
+number_of_layers = [3, 5]
 optimizers = ['adam']
-include_synthetic_datas = [True]
+include_synthetic_datas = [False, True]
 dropout_rates = [0.1]
-batch_sizes = [200]  # 100,
+batch_sizes = [200, 500]  # 100,
 normalizations = ['mmscaler']  # 'no', 'rscaler', 'sscaler',
 
 settings_list = [

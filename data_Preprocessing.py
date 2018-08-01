@@ -17,7 +17,8 @@ from config import (
     end_year,
     do_redownload_all_data,
     fundamental_columns_to_include,
-    stock_count_to_pick
+    stock_count_to_pick,
+    annualization
 )
 
 
@@ -238,11 +239,13 @@ def reshape_into_series(df):
     ser = df.unstack().dropna()
     return ser.swaplevel()
 
-ser_returns = reshape_into_series(returns.rolling(110).mean() * 252)
-ser_v110 = reshape_into_series(returns.rolling(110).std() * np.sqrt(252))
-ser_v60  = reshape_into_series(returns.rolling(60).std() * np.sqrt(252))
-ser_v20  = reshape_into_series(returns.rolling(20).std() * np.sqrt(252))
-ser_v5   = reshape_into_series(returns.rolling(5).std() * np.sqrt(252))
+ser_returns = reshape_into_series(returns.rolling(110).mean() * annualization)
+ser_v110 = reshape_into_series(returns.rolling(110).std() * np.sqrt(annualization))
+ser_v60  = reshape_into_series(returns.rolling(60).std() * np.sqrt(annualization))
+ser_v20  = reshape_into_series(returns.rolling(20).std() * np.sqrt(annualization))
+ser_v5   = reshape_into_series(returns.rolling(5).std() * np.sqrt(annualization))
+
+df['hist_impl_volatility'] = df.impl_volatility.rolling(60).mean()
 
 
 print('Merging with prices data')
@@ -253,7 +256,7 @@ prices_raw.set_index(['date','permno'],inplace=True)
 prices_raw['prc_shifted_1'] = prices_raw.groupby(level=1)['prc'].shift(-1)
 
 
-merged = pd.merge(df[['days', 'option_price', 'impl_volatility', 'delta', 'strike_price']],
+merged = pd.merge(df[['days', 'option_price', 'impl_volatility', 'delta', 'strike_price', 'hist_impl_volatility']],
          prices_raw[['prc', 'prc_shifted_1']], how='inner', left_index=True, right_index=True)
 
 
@@ -500,6 +503,7 @@ def generate_synthetic_data(option_type='call'):
         means[column] = data[column].mean()
         stds[column] = data[column].std()
 
+    impl_volatility = hist_impl_volatility = None
     complete_dummy_list = ['ff_ind_{}'.format(i) for i in range(49)]
 
     synth_list = []
@@ -508,7 +512,6 @@ def generate_synthetic_data(option_type='call'):
     for K in range(10, int(S * 1.5), 10):
         for i in range(0, 10):
             days = 0
-            impl_volatility = None
             if option_type == 'call':
                 option_price = max(0, S - K)
                 if S > K:
@@ -543,7 +546,7 @@ def generate_synthetic_data(option_type='call'):
             dummy_values = [0] * len(complete_dummy_list)
             dummy_values[np.random.randint(49)] = 1
 
-            new_row = [days, option_price, impl_volatility, delta, strike_price, prc, returns, v110, v60, v20,
+            new_row = [days, option_price, impl_volatility, hist_impl_volatility, delta, strike_price, prc, returns, v110, v60, v20,
                                v5, r, moneyness, scaled_option_price, vix]
             new_row += dummy_values
             new_row += additional_column_values
@@ -556,7 +559,6 @@ def generate_synthetic_data(option_type='call'):
     for i in range(3):
         for days in range(2, 60):
             days = days / 365
-            impl_volatility = None
             strike_price = K
             prc = S
             returns = np.random.randn() * stds['returns'] + means['returns']
@@ -581,7 +583,7 @@ def generate_synthetic_data(option_type='call'):
 
             dummy_values = [0] * len(complete_dummy_list)
             dummy_values[np.random.randint(49)] = 1
-            new_row = [days, option_price, impl_volatility, delta, strike_price, prc, returns, v110, v60, v20,
+            new_row = [days, option_price, impl_volatility, hist_impl_volatility, delta, strike_price, prc, returns, v110, v60, v20,
                                v5, r, moneyness, scaled_option_price, vix]
             new_row += dummy_values
             new_row += additional_column_values
@@ -593,7 +595,6 @@ def generate_synthetic_data(option_type='call'):
     for S in range(int(K * 2.5), int(K * 4), 50):
         for days in range(2, 60):
             days = days / 365
-            impl_volatility = None
 
             strike_price = K
             prc = S
@@ -619,14 +620,14 @@ def generate_synthetic_data(option_type='call'):
 
             dummy_values = [0] * len(complete_dummy_list)
             dummy_values[np.random.randint(49)] = 1
-            new_row = [days, option_price, impl_volatility, delta, strike_price, prc, returns, v110, v60, v20,
+            new_row = [days, option_price, impl_volatility, hist_impl_volatility, delta, strike_price, prc, returns, v110, v60, v20,
                                v5, r, moneyness, scaled_option_price, vix]
             new_row += dummy_values
             new_row += additional_column_values
 
             synth_list.append(new_row)
 
-    synth_df = pd.DataFrame(synth_list, columns=['days', 'option_price', 'impl_volatility', 'delta', 'strike_price',
+    synth_df = pd.DataFrame(synth_list, columns=['days', 'option_price', 'impl_volatility', 'hist_impl_volatility', 'delta', 'strike_price',
                                                  'prc', 'returns', 'v110', 'v60', 'v20', 'v5', 'r', 'moneyness',
                                                  'scaled_option_price', 'vix'] + complete_dummy_list + additional_columns)
     # Shuffling the order of the rows

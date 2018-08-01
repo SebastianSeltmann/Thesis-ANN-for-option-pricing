@@ -14,24 +14,19 @@ from matplotlib import pyplot as plt
 
 from config import paths, required_precision
 
-'''
-sorted_train,
-train,
-validate,
-some_stocks,
-'''
 from data import (
     data as dataset,
     some_stock,
     synth
 )
 
-from models import (
-    black_scholes_price
-)
+from models import black_scholes_price
 
 
 def timeit(method):
+    '''
+    Decorator to print the runtime of a function after it finishes
+    '''
     def timed(*args, **kw):
         ts = time()
         result = method(*args, **kw)
@@ -66,7 +61,7 @@ def get_data_window(start_date='2010-01-01',
 
     idx_stock = stocks == stock
     idx_train = (dates >= start_date) & (dates < end_train_start_val_date)
-    idx_validate = (dates >= end_train_start_val_date) & (end_train_start_val_date < end_val_date)
+    idx_validate = (dates >= end_train_start_val_date) & (dates < end_val_date)
 
     train = dataset.loc[idx_train & idx_stock]
     validate = dataset.loc[idx_validate & idx_stock]
@@ -81,20 +76,25 @@ def get_data_window(start_date='2010-01-01',
     return data
 
 
-def get_data_package(model, columns, include_synth, normalize,
+def get_data_package(model, columns=['days', 'moneyness'], include_synth=False, normalize='no',
                      start_date='2010-01-01',
                      end_train_start_val_date='2010-06-30',
                      end_val_date='2010-12-31',
                      stock=some_stock):
-    number_of_features = model.input.shape[1]._value
-    more_than_one_output = type(model.output) is list
-    if len(columns) != number_of_features:
-        raise('mismatch between model feature count and number of columns selected in data')
-
-    if more_than_one_output:
+    if model == 'BS':
+        output_columns = ['scaled_option_price']
+    elif model == 'BS_also_hedging':
         output_columns = ['scaled_option_price', 'perfect_hedge_1']
     else:
-        output_columns = ['scaled_option_price']
+        number_of_features = model.input.shape[1]._value
+        more_than_one_output = type(model.output) is list
+        if len(columns) != number_of_features:
+            raise('mismatch between model feature count and number of columns selected in data')
+
+        if more_than_one_output:
+            output_columns = ['scaled_option_price', 'perfect_hedge_1']
+        else:
+            output_columns = ['scaled_option_price']
     ref_columns = ['prc', 'option_price', 'strike_price', 'prc_shifted_1', 'option_price_shifted_1']
 
     data = get_data_window(
@@ -103,14 +103,14 @@ def get_data_package(model, columns, include_synth, normalize,
         start_date=start_date,
         end_train_start_val_date=end_train_start_val_date,
         end_val_date=end_val_date,
-        stock=some_stock)
+        stock=stock)
     ref_data = get_data_window(
         input_columns=ref_columns,
         output_columns=output_columns,
         start_date=start_date,
         end_train_start_val_date=end_train_start_val_date,
         end_val_date=end_val_date,
-        stock=some_stock)
+        stock=stock)
 
     if include_synth:
         X_synth = synth.loc[:,columns]
@@ -126,8 +126,9 @@ def get_data_package(model, columns, include_synth, normalize,
         X_synth = Y_synth = None
 
 
-    if normalize != 'no':
-
+    if normalize == 'no':
+        scaler_X = scaler_Y = None
+    else:
         if normalize == 'rscaler':
             scaler_X = preprocessing.RobustScaler()
             scaler_Y = preprocessing.RobustScaler()
@@ -456,30 +457,66 @@ def get_gradients(model, inputs):
     gradients_of_individual_inputs = sess.run(gradients, feed_dict={model.input: np.array(inputs)})[0]
     return gradients_of_individual_inputs
 
+def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', filename='BS_outSample'):
 
-def run_black_scholes(inSample=False, filename='BS_outSample'):
-    raise NotImplementedError
-    sample = get_data_for_single_stock_and_day(sorted_train, some_stock, range(-1, -71, -1))
-    #validate = get_sample(sorted_train, some_stock, range(-71, -150, -1))
-    validate = get_data_for_single_stock_and_day(sorted_train, some_stocks[1], range(-71, -150, -1))
-
-    hist_impl_vol = sample.impl_volatility.mean()
-    hist_r = sample.r.mean()
+    # data, X_synth, Y_synth, ref_data_tuple, scaler_X, scaler_Y = data_package
+    data = data_package[0]
+    X_train, Y_train, X_test, Y_test = data
     if inSample:
-        validate = sample
-    actual_prices = validate.scaled_option_price
-    predicted_prices = actual_prices.copy()
-    for j in range(len(validate)):
-        single = validate.iloc[j]
-        prediction = black_scholes_price(single.moneyness, single.days/12, hist_r, hist_impl_vol)
-        predicted_prices[j] = prediction
-    plt.plot(actual_prices, predicted_prices, "+")
-    plt.show()
+        X_test, Y_test = X_train, Y_train
 
-    validate["prediction"] = predicted_prices
-    validate["error"] = validate.scaled_option_price - validate.prediction
+    X_train.days = X_train.days / 365
+    X_test.days = X_test.days / 365
 
-    store = pd.HDFStore(paths['neural_net_output'])
-    store[filename] = validate
-    store.close()
-    return
+    def black_scholes_pricer(m, t, r, s, optiontype='call'):
+        d1 = 1 / (s * (t ** (1 / 2))) * (np.log(m) + (r + (s ** 2) / 2) * t)
+        d2 = d1 - s * t ** (1 / 2)
+        if optiontype == 'call':
+            price = norm.cdf(d1) * m - norm.cdf(d2) * 1 * np.exp(-r * t)
+            delta = norm.cdf(d1)
+        elif optiontype == 'put':
+            price = norm.cdf(-d2) * 1 * np.exp(-r * t) - norm.cdf(-d1) * m
+            delta = - norm.cdf(-d1)
+        else:
+            raise ValueError("optiontype must be 'call' or 'put'")
+        return price, delta
+
+    def BS_predict(point):
+        days, moneyness, hist_impl_volatility, v60, r = tuple(point)
+        if vol_proxy == 'hist_implied':
+            vola = hist_impl_volatility
+        elif vol_proxy == 'hist_realized':
+            vola = v60
+        else:
+            raise ValueError
+        result = black_scholes_pricer(moneyness, days, r, vola)
+        return pd.Series(result, index=['price', 'delta'])
+
+    prediction = X_test.apply(BS_predict, axis=1)
+
+    results = X_test.copy()
+    results['scaled_option_price'] = Y_test['scaled_option_price']
+    results['prediction'] = prediction.price
+    results['delta'] = prediction.delta
+    results['error'] = results.scaled_option_price - results.prediction
+
+    # results.error.hist(bins=200)
+    # plt.show()
+
+    MAE = results.error.abs().mean()
+    #MSE = results.error.pow(2).mean()
+
+    '''
+    b = results.loc[results.error.abs() == results.error.abs().max()].iloc[0]
+    m = b.moneyness
+    t = b.days
+    r = b.r
+    s = b.v60
+    print(t * 252)
+
+    df['d1'] = ((1 / (X_test.v60*X_test.days.pow(1/2)))*(np.log(X_test.moneyness)+((X_test.r+X_test.v60.pow(2))*X_test.days))).values
+    df['d2'] = df.d1 - (X_test.v60*X_test.days.pow(1/2)).values
+    df['p'] = df.d1.apply(norm.cdf)*X_test.moneyness.values - df.d2.apply(norm.cdf)*np.exp(-X_test.r*X_test.v60).values
+    '''
+
+    return MAE
