@@ -122,6 +122,8 @@ def get_data_package(model, columns, include_synth, normalize,
 
 
         data = new_X_train, new_Y_train, X_val, Y_val
+    else:
+        X_synth = Y_synth = None
 
 
     if normalize != 'no':
@@ -474,6 +476,69 @@ def boxplot_SSD_distribution(SSD_distribution, features, title):
     plt.boxplot(c_df_without_moneyness.transpose(), labels=_features, vert=False)
     plt.savefig('plots/SSD-dist-{}.png'.format(title), bbox_inches="tight")
     plt.show()
+
+def get_data_description():
+    from data import data
+    from config import full_feature_combination_list
+
+    cols = ['option_price'] + full_feature_combination_list[-1]
+    relevant_data = data.loc[:, cols]
+    relevant_data.loc[:, 'days'] = np.int_(relevant_data.loc[:, 'days'])
+
+    desc_df = pd.DataFrame(index=relevant_data.columns)
+    desc_df['mean'] = relevant_data.mean()
+    desc_df['min'] = relevant_data.min()
+    desc_df['25%'] = relevant_data.quantile(0.25)
+    desc_df['50%'] = relevant_data.quantile(0.50)
+    desc_df['75%'] = relevant_data.quantile(0.75)
+    desc_df['max'] = relevant_data.max()
+    desc_df['variance'] = relevant_data.var()
+    desc_df['skewness'] = relevant_data.skew()
+    desc_df['kurtosis'] = relevant_data.kurtosis()
+
+    '''
+    tex = desc_df.round(2).to_latex()
+    with open('description-tex.txt', 'w') as text_file:
+        text_file.write(tex)
+    '''
+    print(desc_df)
+
+
+def heatmapplot_correlations():
+    from matplotlib import pyplot as plt
+    import numpy as np
+    from data import data
+    from config import full_feature_combination_list
+    columns_to_be_included_in_covar_calc = ['option_price'] + full_feature_combination_list[-1]
+    relevant_data = data.loc[:,columns_to_be_included_in_covar_calc]
+    relevant_data.loc[:, 'days'] = np.int_(relevant_data.loc[:,'days'])
+
+    covars = relevant_data.cov()
+    corrs = relevant_data.corr()
+
+    def drop_leading_zero(val):
+        if val.startswith("0."):
+            return val[1:]
+        if val.startswith("-0."):
+            return "-" + val[2:]
+        return val
+
+    fig, ax = plt.subplots()
+    cax = ax.imshow(corrs, vmin=-1, vmax=1, cmap=plt.cm.seismic)
+    fig.colorbar(cax)
+    ax.set_xticks(np.arange(len(corrs.columns)))
+    ax.set_yticks(np.arange(len(corrs.index)))
+    ax.set_xticklabels(list(corrs.columns), rotation=90)
+    ax.set_yticklabels(list(corrs.index))
+    for i in range(len(corrs.columns)):
+        for j in range(len(corrs.index)):
+            # num = '{:d}'.format(int(corrs.iloc[i, j]*100))
+            num = drop_leading_zero('{:.2f}'.format(corrs.iloc[i,j]))
+            text = ax.text(j, i, num,
+                           ha="center", va="center", color="k")
+    # ax.set_title('Correlation Matrix of included features')
+    plt.savefig('plots/correlation-matrix.png', bbox_inches="tight")
+    fig.show()
 
 def scatterplot_PAD(model, datasets, id):
     fig, axes = plt.subplots(4, 3, figsize=(10, 12))
