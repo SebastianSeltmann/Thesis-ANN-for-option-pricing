@@ -139,7 +139,7 @@ def perform_experiment():
             stock, date_tuple, rerun_id = window
             dt_start, dt_middle, dt_end = date_tuple
 
-            print('{}.{}'.format(i,j+1), end=' ')
+            print('{}.{}'.format(i,j), end=' ', flush=True)
 
             # We reinitialize these variables to None because they will be appended to cols
             loss_oos = last_losses_mean = last_losses_std = last_val_losses_mean =\
@@ -152,7 +152,7 @@ def perform_experiment():
 
             if multi_target:
                 model_name = 'multit_'+model_name
-                print(model_name, end=': ')
+                print(model_name, end=': ', flush=True)
 
                 model = multitask_model(input_dim=len(used_features), shared_layers=sl,
                                         individual_layers=il, nodes_per_layer=n,
@@ -160,7 +160,7 @@ def perform_experiment():
                                         optimizer=optimizer)
             else:
                 model_name = 'full_'+model_name
-                print(model_name, end=': ')
+                print(model_name, end=': ', flush=True)
 
                 model = full_model(input_dim=len(used_features), num_layers=l, nodes_per_layer=n,
                                    loss='mean_squared_error', activation=act, optimizer=optimizer,
@@ -271,22 +271,23 @@ def perform_experiment():
             cols['dropout'].append(dropout_rate)
             cols['batch_size'].append(batch_size)
 
-
+            print((model_end_time - starting_time).seconds, end=' - ')
             print(loss)
 
             #filename = '{}_{:%Y-%m-%d_%H-%M}.h5'.format(model_name, datetime.now())
             filename = model_name + '_' + starting_time_str + '.h5'
+
             model.save(paths['all_models'] + filename)
 
             # if rerun_id == 0:
             #     scatterplot_PAD(model, [X_train, X_val], i)
             collect_gradients_data = True
             if collect_gradients_data:
-                gradient_df_columns = ['model_name', 'time', 'sample' 'feature', 'feature_value', 'gradient']
+                gradient_df_columns = ['model_name', 'time', 'sample', 'feature', 'feature_value', 'gradient']
                 grad_data = {key: [] for key in gradient_df_columns}
 
                 sampling_dict = dict(train=X_train, test=X_val)
-                for sample_key, points in sampling_dict.items:
+                for sample_key, points in sampling_dict.items():
 
                     gradients = get_gradients(model, points)
                     for i, feature_name in enumerate(points.columns):
@@ -322,22 +323,28 @@ def perform_experiment():
             if saveResultsForLatex:
                 SSDD_df = pd.DataFrame(SSD_distribution_val, columns=used_features)
 
+                key = 'SSDD_df' if i == 1 else 'SSDD_df_{}'.format(i)
+
                 with pd.HDFStore(paths['data_for_latex']) as store:
-                    store['SSDD_df'] = SSDD_df
+                    store[key] = SSDD_df
 
     results_df = pd.DataFrame(cols)
 
     try:
         with pd.ExcelFile(paths['results-excel']) as reader:
             previous_results = reader.parse("RunData")
-
+        runID = previous_results['runID'].max()+1
+        results_df['runID'] = runID
         merged_results = pd.concat([results_df, previous_results])
     except:
+        results_df['runID'] = 1
         merged_results = results_df
 
     with pd.ExcelWriter(paths['results-excel']) as writer:
         merged_results.to_excel(writer, 'RunData')
         writer.save()
+
+    # cols = {col: [] for col in watches}
 
     if run_BS_as_well:
 
@@ -369,9 +376,11 @@ def perform_experiment():
     try:
         with pd.ExcelFile(paths['results-excel-BS']) as reader:
             BS_previous_results = reader.parse("RunData")
-
+        runID = BS_previous_results['runID'].max()+1
+        BS_results_df['runID'] = runID
         BS_merged_results = pd.concat([BS_results_df, BS_previous_results])
     except:
+        BS_results_df['runID'] = 1
         BS_merged_results = BS_results_df
 
     with pd.ExcelWriter(paths['results-excel-BS']) as writer:

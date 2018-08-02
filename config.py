@@ -3,7 +3,7 @@ import itertools
 from numpy.random import seed as seed_np
 from tensorflow import set_random_seed as seed_tf
 from time import time
-import datetime
+from datetime import datetime
 
 # ----------------------------------
 # Authentication
@@ -14,7 +14,7 @@ assert quandl_key is not None
 # ----------------------------------
 # Reproducibility
 # ----------------------------------
-random_seed = time()
+random_seed = int(time()*10000) % 2**31
 seed_np(random_seed)
 seed_tf(random_seed)
 
@@ -34,7 +34,7 @@ do_redownload_all_data = False
 
 overlapping_windows = True
 # window_limiters = ['single', 'hyper-param-search', 'final-testing', 'no']
-limit_windows = 'hyper-param-search'
+limit_windows = 'final-testing'
 
 fundamental_columns_to_include = [
     'permno',
@@ -72,7 +72,7 @@ paths['results-excel'] = 'results_excel.xlsx'
 paths['results-excel-BS'] = 'results_excel-BS.xlsx'
 
 paths['gradients_data'] = 'gradients_data.h5'
-paths['all_models'] = rootpath + 'all_models\\{}\\{:%Y-%m-%d_%H-%M}'.format(datetime.now())
+paths['all_models'] = rootpath + 'all_models\\{:%Y-%m-%d_%H-%M}\\'.format(datetime.now())
 
 
 paths['prices_raw'] = rootpath + "Data[IDs, constituents, prices].h5"
@@ -85,6 +85,9 @@ paths['names'] = rootpath + 'names.h5'
 paths['options'] = []
 for y in range(1996, 2017):
     paths['options'].append(rootpath + "OptionsData\\rawopt_" + str(y) + "AllIndices.csv")
+
+if not os.path.exists(paths['all_models']):
+    os.makedirs(paths['all_models'])
 
 # ----------------------------------
 # Feature Selection
@@ -108,6 +111,8 @@ optional_features += ['vix', 'returns', 'r', 'v60', 'v20']
 optional_features += ['roe', 'roa', 'capital_ratio']
 optional_features += ['pe_op_dil']  # ,'pe_op_basic'
 
+optional_features = ['r', 'v60', 'vix', 'returns', 'roa', 'capital_ratio', 'pe_op_dil']
+
 full_feature_combination_list = []
 include_only_single_features = False
 for i in range(len(optional_features) + 1):
@@ -119,13 +124,19 @@ for i in range(len(optional_features) + 1):
 # active_feature_combinations = list(feature_combinations.keys())
 # active_feature_combinations = list(range(len(full_feature_combination_list)))   # all possible combinations
 # active_feature_combinations = [0, len(full_feature_combination_list)-1]         # every and nothing
-active_feature_combinations = [len(full_feature_combination_list) - 1]  # "full" model only
+# active_feature_combinations = [len(full_feature_combination_list) - 1]  # "full" model only
+
+# All and nothing and any individual
+full_feature_combination_list = [mandatory_features]
+full_feature_combination_list += [mandatory_features+[feature] for feature in optional_features]
+full_feature_combination_list += [mandatory_features + optional_features]
+active_feature_combinations = list(range(len(full_feature_combination_list)))
 
 # ----------------------------------
 # Hyperparameters
 # ----------------------------------
 required_precision = 0.01 # if this is not reached during initial training, the run is declared "failed", saving time
-epochs = 800
+epochs = 250
 separate_initial_epochs = int(epochs / 10)
 lr = None  # 0.0001
 batch_normalization = False
@@ -134,12 +145,12 @@ multi_target = False
 identical_reruns = 1
 
 activations = ['relu']  # 'tanh'
-number_of_nodes = [100, 250]
-number_of_layers = [3, 5]
+number_of_nodes = [250]
+number_of_layers = [3]
 optimizers = ['adam']
-include_synthetic_datas = [False, True]
+include_synthetic_datas = [True]
 dropout_rates = [0.1]
-batch_sizes = [200, 500]  # 100,
+batch_sizes = [500]  # 100,
 normalizations = ['mmscaler']  # 'no', 'rscaler', 'sscaler',
 
 settings_list = [

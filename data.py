@@ -29,7 +29,7 @@ for y in range(start_year, end_year):
     end = '{}-01-01'.format(y+1)
     date_tuple_list.append((start, mid, end))
 
-    if overlapping_windows:
+    if overlapping_windows and y < end_year:
         start = '{}-07-01'.format(y)
         mid = '{}-01-01'.format(y+1)
         end = '{}-07-01'.format(y+1)
