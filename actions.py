@@ -510,7 +510,7 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
     # plt.show()
 
     MAE = results.error.abs().mean()
-    #MSE = results.error.pow(2).mean()
+    MSE = results.error.pow(2).mean()
 
     '''
     b = results.loc[results.error.abs() == results.error.abs().max()].iloc[0]
@@ -525,4 +525,4 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
     df['p'] = df.d1.apply(norm.cdf)*X_test.moneyness.values - df.d2.apply(norm.cdf)*np.exp(-X_test.r*X_test.v60).values
     '''
 
-    return MAE
+    return MSE, MAE

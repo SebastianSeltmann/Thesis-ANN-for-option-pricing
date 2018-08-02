@@ -348,7 +348,7 @@ def perform_experiment():
 
     if run_BS_as_well:
 
-        BS_watches = ['stock', 'dt_start', 'dt_middle', 'dt_end', 'vol_proxy']
+        BS_watches = ['stock', 'dt_start', 'dt_middle', 'dt_end', 'vol_proxy', 'MSE', 'MAE']
         BS_cols = {col: [] for col in BS_watches}
 
         j = 0
@@ -364,23 +364,24 @@ def perform_experiment():
                 end_train_start_val_date=dt_middle,
                 end_val_date=dt_end
             )
-            BS_Error = run_black_scholes(data_package, vol_proxy=vol_proxy)
+            MSE, MAE = run_black_scholes(data_package, vol_proxy=vol_proxy)
 
             BS_cols['stock'] = stock
             BS_cols['dt_start'] = dt_start
             BS_cols['dt_middle'] = dt_middle
             BS_cols['dt_end'] = dt_end
             BS_cols['vol_proxy'] = vol_proxy
+            BS_cols['MSE'] = MSE
+            BS_cols['MSE'] = MAE
 
         BS_results_df = pd.DataFrame(BS_cols)
+        BS_results_df['runID'] = runID
     try:
         with pd.ExcelFile(paths['results-excel-BS']) as reader:
             BS_previous_results = reader.parse("RunData")
-        runID = BS_previous_results['runID'].max()+1
-        BS_results_df['runID'] = runID
+        #runID = BS_previous_results['runID'].max()+1
         BS_merged_results = pd.concat([BS_results_df, BS_previous_results])
     except:
-        BS_results_df['runID'] = 1
         BS_merged_results = BS_results_df
 
     with pd.ExcelWriter(paths['results-excel-BS']) as writer:
@@ -396,9 +397,6 @@ def perform_experiment():
         get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='scaled_option_price')
 
     print('Close')
-
-    #get_and_plot([model_name+'_inSample'], variable='error')
-
 
 if __name__ == '__main__':
     do_it()
