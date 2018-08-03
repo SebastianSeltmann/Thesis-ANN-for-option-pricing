@@ -159,7 +159,7 @@ dropout_rates = [0.1]
 batch_sizes = [500]  # 100,
 normalizations = ['mmscaler']  # 'no', 'rscaler', 'sscaler',
 
-if limit_windows == 'mock-testing':
+if limit_windows == 'final-testing':
     epochs = 10
     separate_initial_epochs = 1
     required_precision = 100
