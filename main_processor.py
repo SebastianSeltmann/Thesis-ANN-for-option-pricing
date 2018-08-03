@@ -27,6 +27,7 @@ from keras import backend as K
 from keras.models import  load_model
 from datetime import datetime
 import itertools
+import os
 import matplotlib.pyplot as plt
 from scipy.stats import kde
 from openpyxl import load_workbook
@@ -47,7 +48,9 @@ from config import (
     epochs,
     saveResultsForLatex,
     run_BS_as_well,
-    vol_proxy
+    vol_proxy,
+    limit_windows,
+    onCluster
 )
 from models import (
     full_model,
@@ -122,6 +125,11 @@ def perform_experiment():
                      settings_combi_count*len(active_feature_combinations)*window_combi_count*identical_reruns
                      ))
 
+    # tt_start = datetime.now()
+    # tt_end = datetime.now()
+    # print((tt_end - tt_start).seconds, end=' a- ')
+    # tt_start = datetime.now()
+
     i = 0
     for settings in itertools.product(*settings_list): # equivalent to a bunch of nested for-loops
         i += 1
@@ -150,6 +158,7 @@ def perform_experiment():
                                         int(dropout_rate*10), int(include_synthetic_data),
                                         normalization, batch_size)
 
+
             if multi_target:
                 model_name = 'multit_'+model_name
                 print(model_name, end=': ', flush=True)
@@ -168,6 +177,7 @@ def perform_experiment():
                                    dropout_rate=dropout_rate)
 
             model.name = model_name
+
 
             # when rerun_id is 0, that means we just switched to a new stock or date, or setting
             # that is when we need to get the data again
@@ -192,10 +202,13 @@ def perform_experiment():
             starting_time = datetime.now()
             starting_time_str = '{:%Y-%m-%d_%H-%M}'.format(starting_time)
 
+
             _, initial_loss, _ = run_and_store_ANN(model=model, inSample=True, model_name='i_'+model_name+'_inSample',
                               nb_epochs=separate_initial_epochs, reset='yes', columns=used_features,
                               include_synth=include_synthetic_data, normalize=normalization, batch_size=batch_size,
                                                    data_package=data_package, starting_time_str=starting_time_str)
+
+
 
             if initial_loss > required_precision:
                 print('FAILED', end=' ')
@@ -204,13 +217,14 @@ def perform_experiment():
 
             else:
                 cols['failed'].append(int(False))
-
                 _, loss, loss_tuple = run_and_store_ANN(model=model, inSample=True, model_name=model_name+'_inSample',
                                             nb_epochs=epochs - separate_initial_epochs, reset='continue',
                                             columns=used_features, get_deltas=True,
                                             include_synth=include_synthetic_data,
                                             normalize=normalization, batch_size=batch_size,
                                                         data_package=data_package, starting_time_str=starting_time_str)
+
+
 
                 _, loss_oos, _ = run_and_store_ANN(model=model, inSample=False,
                                                 model_name=model_name+'_outSample', reset='reuse',
@@ -221,6 +235,8 @@ def perform_experiment():
 
                 (last_losses_mean, last_losses_std, last_val_losses_mean, last_val_losses_std) = loss_tuple
 
+
+
                 data = data_package[0]
                 X_train = data[0]
                 X_val = data[2]
@@ -228,6 +244,7 @@ def perform_experiment():
                 SSD_val = get_SSD(model, X_val)
                 SSD_distribution_train.append(SSD_train)
                 SSD_distribution_val.append(SSD_val)
+
 
             model_end_time = datetime.now()
 
@@ -274,10 +291,13 @@ def perform_experiment():
             print((model_end_time - starting_time).seconds, end=' - ')
             print(loss)
 
+
             #filename = '{}_{:%Y-%m-%d_%H-%M}.h5'.format(model_name, datetime.now())
             filename = model_name + '_' + starting_time_str + '.h5'
 
-            model.save(paths['all_models'] + filename)
+
+            model.save(os.path.join(paths['all_models'], filename))
+
 
             # if rerun_id == 0:
             #     scatterplot_PAD(model, [X_train, X_val], i)
@@ -305,20 +325,23 @@ def perform_experiment():
 
                 gradients_df = pd.DataFrame(grad_data)
 
-                with pd.HDFStore(paths['gradients_data']) as store:
-                    try:
-                        previous_gradients_df = store['gradients_data']
-                        merged_gradients_df = pd.concat([gradients_df, previous_gradients_df])
-                    except:
-                        merged_gradients_df = gradients_df
-                    store['gradients_data'] = merged_gradients_df
+                if limit_windows != 'mock-testing':
+                    with pd.HDFStore(paths['gradients_data']) as store:
+                        try:
+                            previous_gradients_df = store['gradients_data']
+                            merged_gradients_df = pd.concat([gradients_df, previous_gradients_df])
+                        except:
+                            merged_gradients_df = gradients_df
+                        store['gradients_data'] = merged_gradients_df
 
             if interrupt_flag:
                 break
 
+
         if j >= 5:
-            boxplot_SSD_distribution(SSD_distribution_train, used_features, 'Training Data\n'+model_name)
-            boxplot_SSD_distribution(SSD_distribution_val, used_features, 'Validation Data\n'+model_name)
+            if not onCluster:
+                boxplot_SSD_distribution(SSD_distribution_train, used_features, 'Training Data', model_name)
+                boxplot_SSD_distribution(SSD_distribution_val, used_features, 'Validation Data', model_name)
 
             if saveResultsForLatex:
                 SSDD_df = pd.DataFrame(SSD_distribution_val, columns=used_features)
@@ -330,23 +353,25 @@ def perform_experiment():
 
     results_df = pd.DataFrame(cols)
 
-    try:
-        with pd.ExcelFile(paths['results-excel']) as reader:
-            previous_results = reader.parse("RunData")
-        runID = previous_results['runID'].max()+1
-        results_df['runID'] = runID
-        merged_results = pd.concat([results_df, previous_results])
-    except:
-        results_df['runID'] = 1
-        merged_results = results_df
+    if limit_windows != 'mock-testing':
+        try:
+            with pd.ExcelFile(paths['results-excel']) as reader:
+                previous_results = reader.parse("RunData")
+            runID = previous_results['runID'].max()+1
+            results_df['runID'] = runID
+            merged_results = pd.concat([results_df, previous_results])
+        except:
+            results_df['runID'] = 1
+            merged_results = results_df
 
-    with pd.ExcelWriter(paths['results-excel']) as writer:
-        merged_results.to_excel(writer, 'RunData')
-        writer.save()
+        with pd.ExcelWriter(paths['results-excel']) as writer:
+            merged_results.to_excel(writer, 'RunData')
+            writer.save()
 
     # cols = {col: [] for col in watches}
 
     if run_BS_as_well:
+        print('Running Black Scholes Benchmark')
 
         BS_watches = ['stock', 'dt_start', 'dt_middle', 'dt_end', 'vol_proxy', 'MSE', 'MAE']
         BS_cols = {col: [] for col in BS_watches}
@@ -366,35 +391,38 @@ def perform_experiment():
             )
             MSE, MAE = run_black_scholes(data_package, vol_proxy=vol_proxy)
 
-            BS_cols['stock'] = stock
-            BS_cols['dt_start'] = dt_start
-            BS_cols['dt_middle'] = dt_middle
-            BS_cols['dt_end'] = dt_end
-            BS_cols['vol_proxy'] = vol_proxy
-            BS_cols['MSE'] = MSE
-            BS_cols['MSE'] = MAE
+            BS_cols['stock'].append(stock)
+            BS_cols['dt_start'].append(dt_start)
+            BS_cols['dt_middle'].append(dt_middle)
+            BS_cols['dt_end'].append(dt_end)
+            BS_cols['vol_proxy'].append(vol_proxy)
+            BS_cols['MSE'].append(MSE)
+            BS_cols['MAE'].append(MAE)
 
         BS_results_df = pd.DataFrame(BS_cols)
-        BS_results_df['runID'] = runID
-    try:
-        with pd.ExcelFile(paths['results-excel-BS']) as reader:
-            BS_previous_results = reader.parse("RunData")
-        #runID = BS_previous_results['runID'].max()+1
-        BS_merged_results = pd.concat([BS_results_df, BS_previous_results])
-    except:
-        BS_merged_results = BS_results_df
 
-    with pd.ExcelWriter(paths['results-excel-BS']) as writer:
-        BS_merged_results.to_excel(writer, 'RunData')
-        writer.save()
+        if limit_windows != 'mock-testing':
+            BS_results_df['runID'] = runID
+            try:
+                with pd.ExcelFile(paths['results-excel-BS']) as reader:
+                    BS_previous_results = reader.parse("RunData")
+                #runID = BS_previous_results['runID'].max()+1
+                BS_merged_results = pd.concat([BS_results_df, BS_previous_results])
+            except:
+                BS_merged_results = BS_results_df
+
+            with pd.ExcelWriter(paths['results-excel-BS']) as writer:
+                BS_merged_results.to_excel(writer, 'RunData')
+                writer.save()
 
 
     print('Done')
-    if not cols['failed'][-1]:
-        get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='prediction')
-        get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='error')
-        get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='calculated_delta')
-        get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='scaled_option_price')
+    if not onCluster:
+        if not cols['failed'][-1]:
+            get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='prediction')
+            get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='error')
+            get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='calculated_delta')
+            get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='scaled_option_price')
 
     print('Close')
 

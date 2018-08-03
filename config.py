@@ -33,19 +33,19 @@ stock_count_to_pick = 5
 do_redownload_all_data = False
 
 overlapping_windows = True
-# window_limiters = ['single', 'hyper-param-search', 'final-testing', 'no']
-limit_windows = 'final-testing'
+# window_limiters = ['single', 'hyper-param-search', 'final-testing', 'no', 'mock-testing']
+limit_windows = 'mock-testing'
 
 fundamental_columns_to_include = [
     'permno',
     'public_date',
 
     'ffi49',
-    'roe',
+    #'roe',
     'roa',
     'capital_ratio',
 
-    'pe_op_basic',
+    #'pe_op_basic',
     'pe_op_dil'
 ]
 
@@ -53,9 +53,15 @@ fundamental_columns_to_include = [
 # Local file paths
 # ----------------------------------
 if os.path.isdir('D:/'):
-	rootpath = "D:\\AlgoTradingData\\"
+    rootpath = "D:\\AlgoTradingData\\"
+    onCluster = False
+
+elif os.path.isdir('/scratch/roklemm/option-pricing'):
+    rootpath = '/scratch/roklemm/option-pricing/'
+    onCluster = True
 else:
-	rootpath = "C:\\AlgoTradingData\\"
+    rootpath = "C:\\AlgoTradingData\\"
+    onCluster = False
 
 paths = {}
 paths['data_for_latex'] = rootpath + "data_for_latex.h5"
@@ -67,12 +73,11 @@ paths['model_overfit'] = rootpath + "overfit_model.h5"
 paths['model_mape'] = rootpath + "mape_model.h5"
 paths['model_deep'] = rootpath + "deep_model.h5"
 paths['model_best'] = rootpath + "model_currently_best.h5"
-paths['tensorboard'] = rootpath + "tensorboard-logs\\"
 paths['results-excel'] = 'results_excel.xlsx'
 paths['results-excel-BS'] = 'results_excel-BS.xlsx'
 
-paths['gradients_data'] = 'gradients_data.h5'
-paths['all_models'] = rootpath + 'all_models\\{:%Y-%m-%d_%H-%M}\\'.format(datetime.now())
+paths['gradients_data'] = rootpath + 'gradients_data.h5'
+paths['all_models'] = os.path.join(rootpath, 'all_models', '{:%Y-%m-%d_%H-%M}'.format(datetime.now()))
 
 
 paths['prices_raw'] = rootpath + "Data[IDs, constituents, prices].h5"
@@ -84,7 +89,7 @@ paths['ratios'] = rootpath + 'ratios.h5'
 paths['names'] = rootpath + 'names.h5'
 paths['options'] = []
 for y in range(1996, 2017):
-    paths['options'].append(rootpath + "OptionsData\\rawopt_" + str(y) + "AllIndices.csv")
+    paths['options'].append(os.path.join(rootpath, "OptionsData", "rawopt_" + str(y) + "AllIndices.csv"))
 
 if not os.path.exists(paths['all_models']):
     os.makedirs(paths['all_models'])
@@ -128,9 +133,9 @@ for i in range(len(optional_features) + 1):
 
 # All and nothing and any individual
 full_feature_combination_list = [mandatory_features]
-full_feature_combination_list += [mandatory_features+[feature] for feature in optional_features]
-full_feature_combination_list += [mandatory_features + optional_features]
-active_feature_combinations = list(range(len(full_feature_combination_list)))
+# full_feature_combination_list += [mandatory_features+[feature] for feature in optional_features]
+# full_feature_combination_list += [mandatory_features + optional_features]
+# active_feature_combinations = list(range(len(full_feature_combination_list)))
 
 # ----------------------------------
 # Hyperparameters
@@ -152,6 +157,13 @@ include_synthetic_datas = [True]
 dropout_rates = [0.1]
 batch_sizes = [500]  # 100,
 normalizations = ['mmscaler']  # 'no', 'rscaler', 'sscaler',
+
+if limit_windows == 'mock-testing':
+    epochs = 10
+    separate_initial_epochs = 1
+    required_precision = 100
+    number_of_layers = [2]
+    number_of_nodes = [25]
 
 settings_list = [
     activations,

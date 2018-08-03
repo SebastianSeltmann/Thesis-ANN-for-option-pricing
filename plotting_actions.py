@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
-import matplotlib as plt
+import matplotlib.pyplot as plt
 from plotly.offline import download_plotlyjs, init_notebook_mode, plot, iplot
 import plotly.graph_objs as go
+import os
 
 from config import paths
 
@@ -123,7 +124,7 @@ def get_SSD(model, inputs):
     return SSD
 
 
-def boxplot_SSD_distribution(SSD_distribution, features, title):
+def boxplot_SSD_distribution(SSD_distribution, features, set, model_name):
     _features = features.copy()
 
     SSDD_df = pd.DataFrame(SSD_distribution, columns=_features)
@@ -134,9 +135,9 @@ def boxplot_SSD_distribution(SSD_distribution, features, title):
     _features.remove('moneyness')
 
     plt.figure()
-    plt.title(title)
+    plt.title(set + '\n' + model_name)
     plt.boxplot(c_df_without_moneyness.transpose(), labels=_features, vert=False)
-    plt.savefig('plots/SSD-dist-{}.png'.format(title), bbox_inches="tight")
+    plt.savefig('plots/SSD-dist-{}-{}.png'.format(set, model_name), bbox_inches="tight")
     plt.show()
 
 
@@ -271,7 +272,7 @@ def vol_surface_plot(input_data, setNames=None, variable='impl_volatility'):
     )
 
     fig = go.Figure(data=data, layout=layout)
-    plot(fig, filename='result-plots/'+variable+'-'+setNames[0] + '.html')
+    plot(fig, filename=os.path.join('result-plots',  variable + '-'+setNames[0] + '.html'))
 
 
 def get_and_plot(setNames, variable='error'):

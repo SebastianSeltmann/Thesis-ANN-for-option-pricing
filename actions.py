@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn import preprocessing
+from scipy.stats import norm
 from time import time
 from datetime import datetime
 import os
