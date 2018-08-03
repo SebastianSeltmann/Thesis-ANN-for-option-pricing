@@ -306,8 +306,8 @@ def perform_experiment():
                 for sample_key, points in sampling_dict.items():
 
                     gradients = get_gradients(model, points)
-                    for i, feature_name in enumerate(points.columns):
-                        for value, gradient in zip(points.iloc[:, i], gradients[:, i]):
+                    for feature_iloc, feature_name in enumerate(points.columns):
+                        for value, gradient in zip(points.iloc[:, feature_iloc], gradients[:, feature_iloc]):
                             grad_data['model_name'].append(model_name)
                             grad_data['time'].append(starting_time)
                             grad_data['sample'].append(sample_key)
