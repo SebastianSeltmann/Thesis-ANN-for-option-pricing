@@ -30,7 +30,6 @@ import itertools
 import os
 import matplotlib.pyplot as plt
 from scipy.stats import kde
-from openpyxl import load_workbook
 from time import time
 
 from config import (
