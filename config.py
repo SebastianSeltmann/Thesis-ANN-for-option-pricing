@@ -49,7 +49,7 @@ fundamental_columns_to_include = [
 if os.path.isdir('D:/'):
     rootpath = "D:\\AlgoTradingData\\"
     #rootpath = "D:\\AlgoTradingDataClusterMock\\"
-    onCluster = False
+    onCluster = True
 
 elif os.path.isdir('/scratch/roklemm/option-pricing'):
     rootpath = '/scratch/roklemm/option-pricing/'
@@ -68,9 +68,9 @@ paths['model_overfit'] = rootpath + "overfit_model.h5"
 paths['model_mape'] = rootpath + "mape_model.h5"
 paths['model_deep'] = rootpath + "deep_model.h5"
 paths['model_best'] = rootpath + "model_currently_best.h5"
+
 paths['results-excel'] = 'results_excel.xlsx'
 paths['results-excel-BS'] = 'results_excel-BS.xlsx'
-
 paths['gradients_data'] = rootpath + 'gradients_data.h5'
 paths['all_models'] = os.path.join(rootpath, 'all_models', '{:%Y-%m-%d_%H-%M}'.format(datetime.now()))
 
@@ -153,7 +153,7 @@ dropout_rates = [0.1]
 batch_sizes = [500]  # 100,
 normalizations = ['mmscaler']  # 'no', 'rscaler', 'sscaler',
 
-if limit_windows == 'final-testing':
+if limit_windows == 'mock-testing':
     epochs = 10
     separate_initial_epochs = 1
     required_precision = 100
