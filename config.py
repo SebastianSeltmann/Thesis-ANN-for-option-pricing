@@ -5,6 +5,14 @@ from tensorflow import set_random_seed as seed_tf
 from time import time
 from datetime import datetime
 
+
+# ----------------------------------
+# Other
+# ----------------------------------
+import logging
+logging.getLogger("tensorflow").setLevel(logging.WARNING)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 # ----------------------------------
 # Reproducibility
 # ----------------------------------

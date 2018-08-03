@@ -23,13 +23,13 @@
 import pandas as pd
 import numpy as np
 import json
+import tensorflow as tf
 from keras import backend as K
 from keras.models import  load_model
 from datetime import datetime
 import itertools
 import os
 import matplotlib.pyplot as plt
-from scipy.stats import kde
 from time import time
 
 from config import (
@@ -333,6 +333,8 @@ def perform_experiment():
             if interrupt_flag:
                 break
 
+            K.clear_session()
+            tf.reset_default_graph()
 
         if j >= 5:
             if not onCluster:
