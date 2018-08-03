@@ -13,7 +13,6 @@ import math
 
 from config import (
     paths,
-    quandl_key,
     start_year,
     end_year,
     do_redownload_all_data,
@@ -21,6 +20,12 @@ from config import (
     stock_count_to_pick,
     annualization
 )
+
+# ----------------------------------
+# Authentication
+# ----------------------------------
+from sensitive_config import quandl_key
+assert quandl_key is not None
 
 '''
     [
@@ -40,7 +45,7 @@ from config import (
         'scaled_option_price'
     ]
  '''
-
+import dask.dataframe as dd
 
 quandl.ApiConfig.api_key = quandl_key
 
@@ -55,6 +60,7 @@ def show_largest_globals():
     for tuple in sorted_locals[-6:-1]:
         name, size = tuple
         print('{}: {}'.format(name, size))
+
 
 def fetch_and_store_sp500():
     ## ---------------------- WRDS CONNECTION  ------------------------
@@ -207,6 +213,7 @@ def download_vix_data_from_quandl():
     store['vix_quandl'] = vix
     store.close()
 
+
 def download_vix_data(db):
     print('Downloading vix data')
     if db is None:
@@ -353,6 +360,12 @@ for year in range(start_year, end_year):  # range(1996, 2016)
 print('Calculating returns and volas')
 returns = prices.pct_change()
 
+try:
+    print("using dask")
+except:
+    print("using pandas")
+
+
 def reshape_into_series(df):
     df.index = df.index.astype('datetime64[ns]')
     df.columns = df.columns.astype(np.int64)
@@ -420,6 +433,8 @@ gc.collect()
 pd.merge(merged, vix, left_on='date', right_on='date')# vix.columns
 
 '''
+gc.collect()
+
 show_largest_globals()
 
 

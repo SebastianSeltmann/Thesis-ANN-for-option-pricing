@@ -6,12 +6,6 @@ from time import time
 from datetime import datetime
 
 # ----------------------------------
-# Authentication
-# ----------------------------------
-from sensitive_config import quandl_key
-assert quandl_key is not None
-
-# ----------------------------------
 # Reproducibility
 # ----------------------------------
 random_seed = int(time()*10000) % 2**31
