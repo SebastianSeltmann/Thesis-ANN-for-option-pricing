@@ -102,10 +102,6 @@ from data import (
 )
 '''
 
-def do_it():
-    perform_experiment()
-
-
 def perform_experiment():
 
     watches = ['model_name', 'time', 'optimizer', 'lr', 'epochs', 'features', 'activation', 'layers', 'nodes',
@@ -122,7 +118,7 @@ def perform_experiment():
                      len(active_feature_combinations),
                      window_combi_count,
                      identical_reruns,
-                     settings_combi_count*len(active_feature_combinations)*window_combi_count*identical_reruns
+                     len(active_feature_combinations)*window_combi_count*identical_reruns
                      ))
 
     # tt_start = datetime.now()
@@ -427,4 +423,4 @@ def perform_experiment():
     print('Close')
 
 if __name__ == '__main__':
-    do_it()
+    perform_experiment()

@@ -28,7 +28,7 @@ do_redownload_all_data = False
 
 overlapping_windows = True
 # window_limiters = ['single', 'hyper-param-search', 'final-testing', 'no', 'mock-testing']
-limit_windows = 'mock-testing'
+limit_windows = 'final-testing'
 
 fundamental_columns_to_include = [
     'permno',
