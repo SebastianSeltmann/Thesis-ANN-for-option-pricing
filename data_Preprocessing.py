@@ -1,12 +1,9 @@
 import pandas as pd
 import numpy as np
-import quandl
-import wrds as wrds
 import datetime
 import calendar
 import gc
 
-from matplotlib import pyplot as plt
 import itertools
 
 import math
@@ -18,14 +15,21 @@ from config import (
     do_redownload_all_data,
     fundamental_columns_to_include,
     stock_count_to_pick,
-    annualization
+    annualization,
+    onCluster
 )
 
-# ----------------------------------
-# Authentication
-# ----------------------------------
-from sensitive_config import quandl_key
-assert quandl_key is not None
+if not onCluster:
+    from matplotlib import pyplot as plt
+    import quandl
+    import wrds as wrds
+
+    # ----------------------------------
+    # Authentication
+    # ----------------------------------
+    from sensitive_config import quandl_key
+
+    quandl.ApiConfig.api_key = quandl_key
 
 '''
     [
@@ -45,9 +49,7 @@ assert quandl_key is not None
         'scaled_option_price'
     ]
  '''
-import dask.dataframe as dd
 
-quandl.ApiConfig.api_key = quandl_key
 
 def show_largest_globals():
     import operator
@@ -320,7 +322,6 @@ print('Loading Stock Prices', end='', flush=True)
 with pd.HDFStore(paths['prices_raw']) as store:
     prices_raw = store['Prices_raw']
     prices = store['Prices']
-# print(prices_raw.count())
 
 
 # Data redownload is placed here, because it needs the prices_raw DataFrame
@@ -360,10 +361,6 @@ for year in range(start_year, end_year):  # range(1996, 2016)
 print('Calculating returns and volas')
 returns = prices.pct_change()
 
-try:
-    print("using dask")
-except:
-    print("using pandas")
 
 
 def reshape_into_series(df):
@@ -379,6 +376,7 @@ ser_v20  = reshape_into_series(returns.rolling(20).std() * np.sqrt(annualization
 ser_v5   = reshape_into_series(returns.rolling(5).std() * np.sqrt(annualization))
 
 df['hist_impl_volatility'] = df.impl_volatility.rolling(60).mean()
+
 
 
 print('Merging with prices data')
@@ -399,6 +397,7 @@ merged['v110'] = ser_v110
 merged['v60'] = ser_v60
 merged['v20'] = ser_v20
 merged['v5'] = ser_v5
+
 
 print('Cleaning memory')
 del(df)
@@ -477,6 +476,7 @@ del(ratios)
 #         dummies[dummy] = 0
 # 
 # ratios_to_merge = pd.concat([ratios_to_merge, dummies], axis=1)
+# del(dummies)
 
 def get_last_day_of_month(date):
     last_day = calendar.monthrange(date.year, date.month)[1]
@@ -513,9 +513,7 @@ merged['scaled_option_price'] = merged.option_price / merged.strike_price
 merged['scaled_option_price_shifted_1'] = merged.option_price_shifted_1 / merged.strike_price
 
 
-print('Cleaning memory')
 del(ratios_to_merge)
-del(dummies)
 del(names)
 
 '''
@@ -568,20 +566,21 @@ named_counts_most_consistent = named_counts_omnipresent.loc[idx]
 availability_summary = named_counts_most_consistent.groupby('permno').min()[['count', 'ticker', 'comnam']]
 print(availability_summary)
 
-print('Plotting available data per selected stock and year')
-pivotted = named_counts_most_consistent.pivot(index='ticker', columns='year', values='count')
-plt.figure()
-fig, ax1 = plt.subplots(1,1)
-cax = ax1.imshow(pivotted, cmap='hot')
-#fig.set_xticks((pivotted.columns), list(pivotted.columns))
-ax1.set_xticks(np.arange(len(pivotted.columns)))
-ax1.set_yticks(np.arange(len(pivotted.index)))
-ax1.set_xticklabels(list(pivotted.columns), rotation=45, ha="right")
-ax1.set_yticklabels(list(pivotted.index))
-ax1.set_title('Number of available datapoints (option quotes)\nfor each window before downsampling')
-fig.colorbar(cax)
-plt.savefig('plots/availability.png', bbox_inches="tight")
-plt.show()
+if not onCluster:
+    print('Plotting available data per selected stock and year')
+    pivotted = named_counts_most_consistent.pivot(index='ticker', columns='year', values='count')
+    plt.figure()
+    fig, ax1 = plt.subplots(1,1)
+    cax = ax1.imshow(pivotted, cmap='hot')
+    #fig.set_xticks((pivotted.columns), list(pivotted.columns))
+    ax1.set_xticks(np.arange(len(pivotted.columns)))
+    ax1.set_yticks(np.arange(len(pivotted.index)))
+    ax1.set_xticklabels(list(pivotted.columns), rotation=45, ha="right")
+    ax1.set_yticklabels(list(pivotted.index))
+    ax1.set_title('Number of available datapoints (option quotes)\nfor each window before downsampling')
+    fig.colorbar(cax)
+    plt.savefig('plots/availability.png', bbox_inches="tight")
+    plt.show()
 
 downsampling_n = availability_summary['count'].min()
 print('Sampling each window down to equal size: {}'.format(downsampling_n))

@@ -128,8 +128,8 @@ for i in range(len(optional_features) + 1):
 
 # All and nothing and any individual
 full_feature_combination_list = [mandatory_features]
-# full_feature_combination_list += [mandatory_features+[feature] for feature in optional_features]
-# full_feature_combination_list += [mandatory_features + optional_features]
+full_feature_combination_list += [mandatory_features+[feature] for feature in optional_features]
+full_feature_combination_list += [mandatory_features + optional_features]
 active_feature_combinations = list(range(len(full_feature_combination_list)))
 
 # ----------------------------------
