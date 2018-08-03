@@ -464,6 +464,13 @@ def get_gradients(model, inputs):
     return gradients_of_individual_inputs
 
 
+def get_SSD(model, inputs):
+    from actions import get_gradients
+    gradients_of_individual_inputs = get_gradients(model, inputs)
+    SSD = np.square(gradients_of_individual_inputs).mean(axis=0)
+    return SSD
+
+
 def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', filename='BS_outSample'):
 
     # data, X_synth, Y_synth, ref_data_tuple, scaler_X, scaler_Y = data_package

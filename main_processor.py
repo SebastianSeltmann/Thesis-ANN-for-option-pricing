@@ -76,17 +76,18 @@ from actions import (
     extract_deltas,
     run_black_scholes,
     get_gradients,
-)
-from plotting_actions import (
-    vol_surface_plot,
-    get_and_plot,
     get_SSD,
-    boxplot_SSD_distribution,
-    moving_average,
-    plot_error_over_epochs,
-    plot_surface_of_ANN,
-    scatterplot_PAD
 )
+if not onCluster:
+    from plotting_actions import (
+        vol_surface_plot,
+        get_and_plot,
+        boxplot_SSD_distribution,
+        moving_average,
+        plot_error_over_epochs,
+        plot_surface_of_ANN,
+        scatterplot_PAD
+    )
 from data import (
     windows_list,
     window_combi_count,

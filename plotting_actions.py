@@ -117,11 +117,6 @@ def scatterplot_PAD(model, datasets, id):
     plt.savefig(filename, bbox_inches="tight")
     plt.show()
 
-def get_SSD(model, inputs):
-    from actions import get_gradients
-    gradients_of_individual_inputs = get_gradients(model, inputs)
-    SSD = np.square(gradients_of_individual_inputs).mean(axis=0)
-    return SSD
 
 
 def boxplot_SSD_distribution(SSD_distribution, features, set, model_name):
