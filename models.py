@@ -8,7 +8,7 @@ from keras import backend as K
 from keras.engine.topology import Layer
 import tensorflow as tf
 
-from config import paths
+from config import paths, onCluster
 
 def stupid_model():
     model = Sequential()
@@ -21,7 +21,8 @@ def stupid_model():
     model.compile(optimizer='rmsprop', loss='mse', metrics=['mae'])
     model.save_weights(paths['weights'])
 
-    plot_model(model, to_file='model-diagrams/model-s.png')
+    if not onCluster:
+        plot_model(model, to_file='model-diagrams/model-s.png')
     return model
 
 
@@ -33,7 +34,8 @@ def deep_model(layers=5, nodes_per_layer = 200, loss='mse', activation='relu'):
     model.add(Dense(1, kernel_initializer='normal'))
     model.compile(optimizer='rmsprop', loss=loss, metrics=['mae'])
     model.save_weights(paths['weights'])
-    plot_model(model, to_file='model-diagrams/model-d.png')
+    if not onCluster:
+        plot_model(model, to_file='model-diagrams/model-d.png')
     return model
 
 
@@ -50,7 +52,8 @@ def full_model(input_dim=2, num_layers=5, nodes_per_layer = 200, loss='mse', act
     model.add(Dense(1, kernel_initializer='normal'))
     model.compile(optimizer=optimizer, loss=loss, metrics=['mae'])
     model.save_weights(paths['weights'])
-    plot_model(model, to_file='model-diagrams/model-f.png')
+    if not onCluster:
+        plot_model(model, to_file='model-diagrams/model-f.png')
     return model
 
 
@@ -84,7 +87,8 @@ def multitask_model(input_dim=2, shared_layers=5, individual_layers=3, nodes_per
 
     model = models.Model(inputs=[options_input], outputs=[out_left, out_right])
     model.save_weights(paths['weights'])
-    plot_model(model, to_file='model-diagrams/model-mt.png')
+    if not onCluster:
+        plot_model(model, to_file='model-diagrams/model-mt.png')
     model.compile(optimizer=optimizer, loss='mse', metrics=['mae'], loss_weights=[1., 1.])
     return model
 
@@ -100,7 +104,8 @@ def adding_sample_model():
 
     out = keras.layers.Dense(4)(added)
     model = keras.models.Model(inputs=[input1, input2], outputs=out)
-    plot_model(model, to_file='model-diagrams/adding-sample.png')
+    if not onCluster:
+        plot_model(model, to_file='model-diagrams/adding-sample.png')
 
 
 def rational_model(J=5):
@@ -111,7 +116,8 @@ def rational_model(J=5):
     out = layers.Dense(1, use_bias=False)(added)
     model = models.Model(inputs=[options_input], outputs=out)
     model.save_weights(paths['weights'])
-    plot_model(model, to_file='model-diagrams/rational.png')
+    if not onCluster:
+        plot_model(model, to_file='model-diagrams/rational.png')
     model.compile(optimizer='rmsprop', loss='mse', metrics=['mae'])
     return model
 
@@ -202,7 +208,8 @@ def rational_model_v2(J=5, asLayer=False):
     if asLayer:
         return model
     model.save_weights(paths['weights'])
-    plot_model(model, to_file='model-diagrams/rational_v2.png')
+    if not onCluster:
+        plot_model(model, to_file='model-diagrams/rational_v2.png')
     model.compile(optimizer='rmsprop', loss='mse', metrics=['mae'])
     return model
 
@@ -225,7 +232,8 @@ def rational_multi_model(I=5, K=5, J=5):
     model = models.Model(inputs=[input], outputs=out)
 
     model.save_weights(paths['weights'])
-    plot_model(model, to_file='model-diagrams/rational_multi.png')
+    if not onCluster:
+        plot_model(model, to_file='model-diagrams/rational_multi.png')
     model.compile(optimizer='sgd', loss='mse', metrics=['mae'])
     return model
 
@@ -239,7 +247,8 @@ def custom_model(J=20, activation='relu', loss='mse'):
     out = layers.Dense(1, use_bias=False)(added)
     model = models.Model(inputs=[options_input], outputs=out)
     model.save_weights(paths['weights'])
-    plot_model(model, to_file='model-diagrams/custom.png')
+    if not onCluster:
+        plot_model(model, to_file='model-diagrams/custom.png')
     model.compile(optimizer='rmsprop', loss=loss, metrics=['mae'])
     return model
 
