@@ -4,6 +4,7 @@ import quandl
 import wrds as wrds
 import datetime
 import calendar
+import gc
 
 from matplotlib import pyplot as plt
 import itertools
@@ -21,8 +22,6 @@ from config import (
     annualization
 )
 
-
-from reused_code import fetch_and_store_sp500, store_options
 '''
     [
         'days',
@@ -45,7 +44,7 @@ from reused_code import fetch_and_store_sp500, store_options
 
 quandl.ApiConfig.api_key = quandl_key
 
-def show_larged_globals():
+def show_largest_globals():
     import operator
     import sys
     copy = globals().copy()
@@ -56,6 +55,116 @@ def show_larged_globals():
     for tuple in sorted_locals[-6:-1]:
         name, size = tuple
         print('{}: {}'.format(name, size))
+
+def fetch_and_store_sp500():
+    ## ---------------------- WRDS CONNECTION  ------------------------
+
+    db = wrds.Connection()
+
+    ## ----------------- SOURCING S&P 500 CONSTITUENTS --------------------
+
+    # source historical S&P 500 constituents
+    const = db.get_table('compm', 'idxcst_his')
+
+    # source CRSP identifiers
+    crsp_id = pd.read_csv(paths['sp500_permnos'])
+    crsp_id = crsp_id[crsp_id['ending'] > "1990-12-31"]
+    permnos = crsp_id['PERMNO'].values
+
+    ## ------------------ SOURCING ACCOUNTING DATA -------------------------
+
+    # Test source of accounting data
+    # gvkeys_list = gvkeys.values
+    # SP500_price = db.raw_sql("Select PRCCD,  from comp.g_secd where GVKEY in (" + ", ".join(str(x) for x in gvkeys_list) + ")")
+
+    # No permission to access through python. Check WRDS online querry
+
+
+    ## ------------------- SOURCING PRICE DATA -----------------------------
+    print('Loading Price Data')
+    prices = db.raw_sql("Select date, permno, cusip, PRC, shrout from crspa.dsf where permno in (" + ", ".join(
+        str(x) for x in permnos) + ")" + " and date between '1990-01-01' and '2017-11-22'")
+    prices_sp50 = prices
+
+    permnos_m = prices_sp50['permno'].unique()
+
+    # Process the price data
+
+    for i in permnos_m:
+        if i == 10057:
+            x = prices_sp50[prices_sp50['permno'] == i][['date', 'prc']].set_index('date', drop=True)
+            x.columns = [i]
+            prc_merge = x
+        else:
+            y = prices_sp50[prices_sp50['permno'] == i][['date', 'prc']].set_index('date', drop=True)
+            y.columns = [i]
+            prc_merge = pd.merge(prc_merge, y, how='outer', left_index=True, right_index=True)
+
+    print('Price Data Loaded')
+    ## ----------------------------- EXPORT --------------------------------
+
+    writer1 = pd.ExcelWriter(paths['xlsx constituents & prices'])
+    const.to_excel(writer1, 'Compustat_const')
+    crsp_id.to_excel(writer1, 'CRSP_const')
+    prc_merge.to_excel(writer1, 'Prices')
+    writer1.save()
+
+    prices.to_csv(paths['raw prices'], sep='\t', encoding='utf-8')
+
+    store = pd.HDFStore(paths['h5 constituents & prices'])
+    store['Compustat_const'] = const
+    store['CRSP_const'] = crsp_id
+    store['Prices_raw'] = prices
+    store['Prices'] = prc_merge
+    store.close()
+    return prc_merge, crsp_id
+
+
+def store_options(option_type='call'):
+    store = pd.HDFStore(paths['h5 constituents & prices'])
+    CRSP_const = store['CRSP_const']
+    store.close()
+
+    ## Create constituents data frame
+    open(paths['all_options_h5'], 'w').close()  # delete previous HDF
+    CRSP_const = CRSP_const[CRSP_const['ending'] > '1996-01-01']
+
+    st_y = pd.to_datetime(CRSP_const['start'])
+    en_y = pd.to_datetime(CRSP_const['ending'])
+
+    for file in paths['options']:
+        with open(file, 'r') as o:
+            print(file)
+            data = pd.read_csv(o)
+
+            year_index = file.find('rawopt_')
+            cur_y = file[year_index + 7:year_index + 7 + 4]
+            idx1 = st_y <= cur_y
+            idx2 = en_y >= cur_y
+            idx3 = data.best_bid > 0
+            idx = idx1 & idx2 & idx3
+            const = CRSP_const.loc[idx, :].reset_index(drop=True)
+            listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'best_offer', 'impl_volatility', 'delta', 'strike_price']],
+                             const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
+
+            option_price = (listO.best_bid + listO.best_offer) / 2
+            listO = pd.concat([listO, option_price], axis=1).rename(columns={0: 'option_price'})
+            listO.drop(['best_bid', 'best_offer'], axis=1, inplace=True)
+
+            listO['date'] = pd.to_datetime(listO['date'], format='%d%b%Y')
+            if option_type == 'call':
+                idx3 = listO['delta'] > 0
+            elif option_type == 'put':
+                idx3 = listO['delta'] < 0
+            else:
+                raise ValueError("option_type must be either 'call' or 'put'")
+            listO = listO.loc[idx3, :]
+            listO['strike_price'] = listO['strike_price'] / 1000
+            print(listO.shape)
+            store = pd.HDFStore(paths['all_options_h5'])
+            store.append('options' + cur_y, listO, index=False, data_columns=True)
+            store.close()
+
 
 def determine_available_wrds_data(db=None):
     print('Determining available wrds data')
@@ -91,9 +200,24 @@ def determine_available_wrds_data(db=None):
     writer.save()
 
 
-def download_vix_data():
+def download_vix_data_from_quandl():
     print('Downloading vix data')
     vix = quandl.get("CHRIS/CBOE_VX1") # S&P 500 Volatility Index VIX Futures
+    store = pd.HDFStore(paths['vix'])
+    store['vix_quandl'] = vix
+    store.close()
+
+def download_vix_data(db):
+    print('Downloading vix data')
+    if db is None:
+        db = wrds.Connection()
+    query = ("select date, vix "
+             "from cboe.cboe "
+             "where date > '" + str(start_year) + "0101' "
+             "and date < '" + str(end_year) + "0101' "
+             )
+    vix = db.raw_sql(query)
+
     store = pd.HDFStore(paths['vix'])
     store['vix'] = vix
     store.close()
@@ -173,11 +297,12 @@ def download_names_data(db=None):
 def redownload_all_data():
     db = wrds.Connection()
 
-    download_vix_data()
+    download_vix_data(db)
     download_treasury_data()
     download_dividends_data(db)
     download_fundamentals_data(db)
     download_names_data(db)
+
 
 
 def recompute_optionsdata():
@@ -192,6 +317,7 @@ with pd.HDFStore(paths['prices_raw']) as store:
 
 
 # Data redownload is placed here, because it needs the prices_raw DataFrame
+
 if do_redownload_all_data:
     redownload_all_data()
 
@@ -203,12 +329,6 @@ print(', vix', end='', flush=True)
 with pd.HDFStore(paths['vix']) as store:
     vix = store['vix']
 
-print(', ratios', end='', flush=True)
-with pd.HDFStore(paths['ratios']) as store:
-    ratios = store['ratios']
-    idx1 = ratios.public_date > datetime.date(start_year, 1, 1)
-    idx2 = ratios.public_date < datetime.date(end_year, 1, 1)
-    ratios = ratios.loc[idx1 & idx2]
 
 '''
 print(', dividends', end='', flush=True)
@@ -239,7 +359,7 @@ def reshape_into_series(df):
     ser = df.unstack().dropna()
     return ser.swaplevel()
 
-ser_returns = reshape_into_series(returns.rolling(110).mean() * annualization)
+ser_returns = reshape_into_series(returns.rolling(60).mean() * annualization)
 ser_v110 = reshape_into_series(returns.rolling(110).std() * np.sqrt(annualization))
 ser_v60  = reshape_into_series(returns.rolling(60).std() * np.sqrt(annualization))
 ser_v20  = reshape_into_series(returns.rolling(20).std() * np.sqrt(annualization))
@@ -267,12 +387,6 @@ merged['v60'] = ser_v60
 merged['v20'] = ser_v20
 merged['v5'] = ser_v5
 
-print('Merging with treasury and vix data')
-merged = pd.merge(merged.reset_index(), treasury.reset_index(), left_on='date', right_on='Date', how='inner')
-merged = pd.merge(merged, vix.loc[:,'Close'].reset_index(), left_on='date', right_on='Trade Date', how='inner')
-merged.drop(['Date', 'Trade Date'], axis=1, inplace=True)
-merged.rename(index=str, columns={"Value": "r", "Close": "vix"}, inplace=True)
-
 print('Cleaning memory')
 del(df)
 del(options_data_year)
@@ -287,17 +401,67 @@ del(returns)
 del(prices)
 
 
+print('Merging with treasury and vix data')
+merged.reset_index(inplace=True)
+treasury.reset_index(inplace=True)
+
+gc.collect()
+
+merged = pd.merge(merged, treasury, left_on='date', right_on='Date', how='inner')
+
+# merged = pd.merge(merged, vix.loc[:,'Close'].reset_index(), left_on='date', right_on='Trade Date', how='inner')
+# merged.drop(['Date', 'Trade Date'], axis=1, inplace=True)
+# merged.rename(index=str, columns={"Value": "r", "Close": "vix"}, inplace=True)
+merged.drop(['Date'], axis=1, inplace=True)
+merged.rename(index=str, columns={"Value": "r"}, inplace=True)
+
+gc.collect()
+
+pd.merge(merged, vix, left_on='date', right_on='date')# vix.columns
+
+'''
+show_largest_globals()
+
+
+merged.shape
+treasury.shape
+merged.iloc[0]
+treasury.iloc[0]
+treasury.Date.max()
+merged = pd.merge(merged, treasury, left_on='date', right_on='Date', how='inner')
+
+merged.shape
+treasury.columns
+
+merged.columns
+vix.columns
+vix[0:5]
+
+'''
+
+print(', ratios', end='', flush=True)
+with pd.HDFStore(paths['ratios']) as store:
+    ratios = store['ratios']
+    idx1 = ratios.public_date > datetime.date(start_year, 1, 1)
+    idx2 = ratios.public_date < datetime.date(end_year, 1, 1)
+    ratios = ratios.loc[idx1 & idx2]
+
+del(idx1)
+del(idx2)
+
 print('Merging with fundamentals data')
 # fundamental_columns_to_include = ratios.columns
 ratios_to_merge = ratios.loc[:,fundamental_columns_to_include]
 
-dummies = pd.get_dummies(ratios_to_merge.ffi49.fillna(0).astype(int), prefix='ff_ind')
-complete_dummy_list = ['ff_ind_{}'.format(i) for i in range(49)]
-for dummy in complete_dummy_list:
-    if dummy not in dummies.columns:
-        dummies[dummy] = 0
+del(ratios)
 
-ratios_to_merge = pd.concat([ratios_to_merge, dummies], axis=1)
+# dummies = pd.get_dummies(ratios_to_merge.ffi49.fillna(0).astype(int), prefix='ff_ind')
+# complete_dummy_list = ['ff_ind_{}'.format(i) for i in range(49)]
+# for dummy in complete_dummy_list:
+#     if dummy not in dummies.columns:
+#         dummies[dummy] = 0
+# 
+# ratios_to_merge = pd.concat([ratios_to_merge, dummies], axis=1)
 
 def get_last_day_of_month(date):
     last_day = calendar.monthrange(date.year, date.month)[1]
@@ -335,11 +499,8 @@ merged['scaled_option_price_shifted_1'] = merged.option_price_shifted_1 / merged
 
 
 print('Cleaning memory')
-del(ratios)
 del(ratios_to_merge)
 del(dummies)
-del(idx1)
-del(idx2)
 del(names)
 
 '''
@@ -358,6 +519,13 @@ merged.loc[:, 'P_value_change_1'] = (merged.loc[:, 'prc_shifted_1'] - merged.loc
 '''
 
 print('merged.shape: {}'.format(merged.shape))
+
+'''
+print('removing very far out or in the money options')
+merged = merged.loc[merged.moneyness < 4 & merged.moneyness > ]
+print('merged.shape: {}'.format(merged.shape))
+'''
+
 print('Selecting stocks with most consistent data availability')
 #names = train.reset_index().loc[:, ['permno', 'comnam', 'ticker']].drop_duplicates()
 

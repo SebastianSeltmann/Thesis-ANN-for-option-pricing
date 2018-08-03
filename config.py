@@ -54,6 +54,7 @@ fundamental_columns_to_include = [
 # ----------------------------------
 if os.path.isdir('D:/'):
     rootpath = "D:\\AlgoTradingData\\"
+    #rootpath = "D:\\AlgoTradingDataClusterMock\\"
     onCluster = False
 
 elif os.path.isdir('/scratch/roklemm/option-pricing'):
@@ -135,7 +136,7 @@ for i in range(len(optional_features) + 1):
 full_feature_combination_list = [mandatory_features]
 # full_feature_combination_list += [mandatory_features+[feature] for feature in optional_features]
 # full_feature_combination_list += [mandatory_features + optional_features]
-# active_feature_combinations = list(range(len(full_feature_combination_list)))
+active_feature_combinations = list(range(len(full_feature_combination_list)))
 
 # ----------------------------------
 # Hyperparameters
