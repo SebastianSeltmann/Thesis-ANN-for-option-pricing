@@ -153,6 +153,7 @@ separate_initial_epochs = int(epochs / 10)
 lr = None  # 0.0001
 batch_normalization = False
 multi_target = False
+useEarlyStopping = True
 
 identical_reruns = 1
 

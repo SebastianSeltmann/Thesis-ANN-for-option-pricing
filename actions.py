@@ -8,12 +8,12 @@ import os
 
 import tensorflow as tf
 from keras import backend as K
-from keras.callbacks import TensorBoard
+from keras.callbacks import TensorBoard, EarlyStopping
 
 
 from matplotlib import pyplot as plt
 
-from config import paths, required_precision, onCluster
+from config import paths, required_precision, onCluster, useEarlyStopping
 
 from data import (
     data as dataset,
@@ -382,11 +382,14 @@ def run(model,
 
     # callbacks = [tensorboard]
     '''
-    # callbacks = [TensorBoard(log_dir="logs/"+model_name+"_"+now_str, write_graph=True, write_images=True)]
-    if onCluster:
-        callbacks = []
-    else:
-        callbacks = [TrainValTensorBoard(write_graph=False, log_dir="logs\\{}_{}".format(model_name, starting_time_str))]
+
+    callbacks = []
+    if not onCluster:
+        callbacks.append(TrainValTensorBoard(write_graph=False, log_dir="logs\\{}_{}".format(model_name, starting_time_str)))
+
+    if useEarlyStopping:
+        callbacks.append(EarlyStopping(monitor='val_loss', min_delta=0, patience=3, verbose=0, mode='auto'))
+
 
     # validation_data = None
     validation_data = (X_val, Y_val)

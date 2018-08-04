@@ -50,7 +50,8 @@ from config import (
     vol_proxy,
     limit_windows,
     onCluster,
-    collect_gradients_data
+    collect_gradients_data,
+    useEarlyStopping
 )
 from models import (
     full_model,
@@ -108,7 +109,7 @@ def perform_experiment():
     watches = ['model_name', 'time', 'optimizer', 'lr', 'epochs', 'features', 'activation', 'layers', 'nodes',
                'batch_normalization', 'loss', 'loss_oos', 'used_synth', 'normalize', 'dropout', 'batch_size',
                'failed', 'loss_mean', 'loss_std', 'val_loss_mean', 'val_loss_std', 'stock', 'dt_start', 'dt_middle',
-               'dt_end', 'duration', 'N_train', 'N_val', 'regularizer']
+               'dt_end', 'duration', 'N_train', 'N_val', 'regularizer', 'earlyStopping']
 
     cols = {col: [] for col in watches}
 
@@ -285,6 +286,7 @@ def perform_experiment():
             cols['dropout'].append(dropout_rate)
             cols['batch_size'].append(batch_size)
             cols['regularizer'].append(regularizer)
+            cols['useEarlyStopping'].append(int(useEarlyStopping))
 
             print((model_end_time - starting_time).seconds, end=' - ')
             print(loss)
