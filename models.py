@@ -55,7 +55,7 @@ def full_model(input_dim=2, num_layers=5, nodes_per_layer = 200, loss='mse', act
             model.add(layers.BatchNormalization())
         model.add(Dense(nodes_per_layer, kernel_initializer='RandomNormal', activation=activation))
     model.add(Dense(1, kernel_initializer='normal'))
-    model.compile(optimizer=optimizer, loss=loss, metrics=['mae'])
+    model.compile(optimizer=optimizer, loss=loss, metrics=['mae', 'mape'])
     model.save_weights(paths['weights'])
     if not onCluster:
         plot_model(model, to_file='model-diagrams/model-f.png')
