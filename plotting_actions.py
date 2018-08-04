@@ -118,6 +118,55 @@ def scatterplot_PAD(model, datasets, id):
     plt.show()
 
 
+def plot_histogram_of_results_by_feature(runID=3):
+    with pd.ExcelFile(paths['results-excel']) as reader:
+        previous_results = reader.parse("RunData")
+    with pd.ExcelFile(paths['results-excel-BS']) as reader:
+        BS_results = reader.parse("RunData")
+
+    df = previous_results.loc[previous_results.runID == runID]
+    df_BS = BS_results.loc[BS_results.runID == runID]
+
+    pivotted_dict = {}
+    for feature in df.features.unique():
+        print('{} - {}'.format(df.loc[df.features == feature].val_loss_mean.mean(), feature))
+        idx = (df.features == feature)
+        idx &= (df.val_loss_mean < 0.0001)
+        pivotted_dict[feature] = list(df.loc[idx].val_loss_mean) + [None for x in range(50 - len(df.loc[idx]))]
+
+    idx = df_BS.MSE > 0.0001
+    pivotted_dict['BS'] = list(df_BS.MSE[idx]) + [None for x in range(50 - len(df_BS.loc[idx]))]
+
+
+    pivotted_df = pd.DataFrame(pivotted_dict)
+    # shorter_cols = [colname[15:] for colname in pivotted_df.columns]
+    shorter_cols = []
+    for i, colname in enumerate(pivotted_df.columns):
+        print(i)
+        if colname == 'days_moneyness_r_v60_vix_returns_roa_capital_ratio_pe_op_dil':
+            shorter_cols.append('(All)')
+        elif colname == 'days_moneyness':
+            shorter_cols.append('(None)')
+        elif colname == 'BS':
+            shorter_cols.append('BS')
+        else:
+            shorter_cols.append(colname[15:])
+
+    x = np.array(pivotted_df)
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.hist(x, label=shorter_cols, bins=20)
+    ax.legend()
+    plt.show()
+
+
+    plt.figure()
+    pivotted_df.plot.kde()
+    #BS_result.plot.kde()
+    plt.legend(shorter_cols, ncol=2, shadow=True)
+    plt.savefig('plots/MSE-distributions.png', bbox_inches="tight")
+    plt.show()
+
 
 def boxplot_SSD_distribution(SSD_distribution, features, set, model_name):
     _features = features.copy()
