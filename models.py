@@ -1,7 +1,7 @@
 from scipy.stats import norm
 import numpy as np
 from keras.models import Sequential
-from keras import layers, models
+from keras import layers, models, regularizers
 from keras.layers import Dense, Dropout, Activation
 from keras.utils import plot_model
 from keras import backend as K
@@ -40,9 +40,14 @@ def deep_model(layers=5, nodes_per_layer = 200, loss='mse', activation='relu'):
 
 
 def full_model(input_dim=2, num_layers=5, nodes_per_layer = 200, loss='mse', activation='relu', optimizer='adam',
-               dropout_rate=0, use_batch_normalization=False):
+               dropout_rate=0, use_batch_normalization=False, regularizer=None):
     model = Sequential()
-    model.add(Dense(nodes_per_layer, input_dim=input_dim, kernel_initializer='RandomNormal', activation=activation))
+    if regularizer == 'l1':
+        regularizer = regularizers.l1(0.01)
+    if regularizer == 'l2':
+        regularizer = regularizers.l2(0.01)
+    model.add(Dense(nodes_per_layer, input_dim=input_dim, kernel_initializer='RandomNormal', activation=activation,
+                    kernel_regularizer=regularizer))
     for i in range(num_layers - 1):
         if dropout_rate:
             model.add(Dropout(dropout_rate))

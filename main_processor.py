@@ -49,7 +49,8 @@ from config import (
     run_BS_as_well,
     vol_proxy,
     limit_windows,
-    onCluster
+    onCluster,
+    collect_gradients_data
 )
 from models import (
     full_model,
@@ -107,7 +108,7 @@ def perform_experiment():
     watches = ['model_name', 'time', 'optimizer', 'lr', 'epochs', 'features', 'activation', 'layers', 'nodes',
                'batch_normalization', 'loss', 'loss_oos', 'used_synth', 'normalize', 'dropout', 'batch_size',
                'failed', 'loss_mean', 'loss_std', 'val_loss_mean', 'val_loss_std', 'stock', 'dt_start', 'dt_middle',
-               'dt_end', 'duration', 'N_train', 'N_val']
+               'dt_end', 'duration', 'N_train', 'N_val', 'regularizer']
 
     cols = {col: [] for col in watches}
 
@@ -131,7 +132,7 @@ def perform_experiment():
         i += 1
         SSD_distribution_train = []
         SSD_distribution_val = []
-        act, n, l, optimizer, include_synthetic_data, dropout_rate, normalization, batch_size, c = settings
+        act, n, l, optimizer, include_synthetic_data, dropout_rate, normalization, batch_size, regularizer, c = settings
         used_features = full_feature_combination_list[c]
         if type(l) is tuple:
             sl, il = l
@@ -170,7 +171,7 @@ def perform_experiment():
                 model = full_model(input_dim=len(used_features), num_layers=l, nodes_per_layer=n,
                                    loss='mean_squared_error', activation=act, optimizer=optimizer,
                                    use_batch_normalization=batch_normalization,
-                                   dropout_rate=dropout_rate)
+                                   dropout_rate=dropout_rate, regularizer=regularizer)
 
             model.name = model_name
 
@@ -283,6 +284,7 @@ def perform_experiment():
             cols['normalize'].append(normalization)
             cols['dropout'].append(dropout_rate)
             cols['batch_size'].append(batch_size)
+            cols['regularizer'].append(regularizer)
 
             print((model_end_time - starting_time).seconds, end=' - ')
             print(loss)
@@ -297,7 +299,6 @@ def perform_experiment():
 
             # if rerun_id == 0:
             #     scatterplot_PAD(model, [X_train, X_val], i)
-            collect_gradients_data = True
             if collect_gradients_data:
                 gradient_df_columns = ['model_name', 'time', 'sample', 'feature', 'feature_value', 'gradient']
                 grad_data = {key: [] for key in gradient_df_columns}

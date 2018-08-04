@@ -24,6 +24,7 @@ seed_tf(random_seed)
 # Output for Latex
 # ----------------------------------
 saveResultsForLatex = True
+collect_gradients_data = False
 
 # ----------------------------------
 # Data Preparation
@@ -144,7 +145,7 @@ active_feature_combinations = list(range(len(full_feature_combination_list)))
 # Hyperparameters
 # ----------------------------------
 required_precision = 0.01 # if this is not reached during initial training, the run is declared "failed", saving time
-epochs = 250
+epochs = 500
 separate_initial_epochs = int(epochs / 10)
 lr = None  # 0.0001
 batch_normalization = False
@@ -156,10 +157,11 @@ activations = ['relu']  # 'tanh'
 number_of_nodes = [250]
 number_of_layers = [3]
 optimizers = ['adam']
-include_synthetic_datas = [True]
+include_synthetic_datas = [True, False]
 dropout_rates = [0.1]
 batch_sizes = [500]  # 100,
 normalizations = ['mmscaler']  # 'no', 'rscaler', 'sscaler',
+regularizers = ['l2']
 
 if limit_windows == 'mock-testing':
     epochs = 10
@@ -177,6 +179,7 @@ settings_list = [
     dropout_rates,
     normalizations,
     batch_sizes,
+    regularizers,
     active_feature_combinations
 ]
 
@@ -187,5 +190,5 @@ for setting_options in settings_list:
 # ----------------------------------
 # Benchmark
 # ----------------------------------
-run_BS_as_well = True
+run_BS_as_well = False
 vol_proxy = 'hist_realized'
