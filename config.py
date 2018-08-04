@@ -38,6 +38,7 @@ do_redownload_all_data = False
 overlapping_windows = True
 # window_limiters = ['single', 'hyper-param-search', 'final-testing', 'no', 'mock-testing']
 limit_windows = 'final-testing'
+use_big_time_windows = True
 
 fundamental_columns_to_include = [
     'permno',
@@ -57,14 +58,16 @@ fundamental_columns_to_include = [
 # ----------------------------------
 if os.path.isdir('D:/'):
     rootpath = "D:\\AlgoTradingData\\"
-    #rootpath = "D:\\AlgoTradingDataClusterMock\\"
+    localpath = "D:\\Dropbox\\Studium\\Master\\Thesis\\neuralnet"
     onCluster = True
 
 elif os.path.isdir('/scratch/roklemm/option-pricing'):
     rootpath = '/scratch/roklemm/option-pricing/'
+    localpath = '/scratch/roklemm/option-pricing/'
     onCluster = True
 else:
     rootpath = "C:\\AlgoTradingData\\"
+    localpath = "C:\\Dropbox\\Dropbox\\Studium\\Master\\Thesis\\neuralnet"
     onCluster = False
 
 paths = {}
@@ -78,8 +81,8 @@ paths['model_mape'] = rootpath + "mape_model.h5"
 paths['model_deep'] = rootpath + "deep_model.h5"
 paths['model_best'] = rootpath + "model_currently_best.h5"
 
-paths['results-excel'] = 'results_excel.xlsx'
-paths['results-excel-BS'] = 'results_excel-BS.xlsx'
+paths['results-excel'] = os.path.join(localpath, 'results_excel.xlsx')
+paths['results-excel-BS'] = os.path.join(localpath, 'results_excel-BS.xlsx')
 paths['gradients_data'] = rootpath + 'gradients_data.h5'
 paths['all_models'] = os.path.join(rootpath, 'all_models', '{:%Y-%m-%d_%H-%M}'.format(datetime.now()))
 

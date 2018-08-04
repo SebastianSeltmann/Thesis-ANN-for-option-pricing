@@ -13,7 +13,7 @@ from keras.callbacks import TensorBoard
 
 from matplotlib import pyplot as plt
 
-from config import paths, required_precision
+from config import paths, required_precision, onCluster
 
 from data import (
     data as dataset,
@@ -383,7 +383,10 @@ def run(model,
     # callbacks = [tensorboard]
     '''
     # callbacks = [TensorBoard(log_dir="logs/"+model_name+"_"+now_str, write_graph=True, write_images=True)]
-    callbacks = [TrainValTensorBoard(write_graph=False, log_dir="logs\\{}_{}".format(model_name, starting_time_str))]
+    if onCluster:
+        callbacks = []
+    else:
+        callbacks = [TrainValTensorBoard(write_graph=False, log_dir="logs\\{}_{}".format(model_name, starting_time_str))]
 
     # validation_data = None
     validation_data = (X_val, Y_val)

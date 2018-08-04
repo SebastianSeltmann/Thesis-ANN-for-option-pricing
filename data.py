@@ -6,7 +6,8 @@ from config import (
     end_year,
     identical_reruns,
     overlapping_windows,
-    limit_windows
+    limit_windows,
+    use_big_time_windows
 )
 
 with pd.HDFStore(paths['options_for_ann']) as store:
@@ -23,17 +24,31 @@ selected_stocks = list(availability_summary.index)
 some_stock = selected_stocks[2]
 
 date_tuple_list = []
-for y in range(start_year, end_year):
-    start = '{}-01-01'.format(y)
-    mid = '{}-07-01'.format(y)
-    end = '{}-01-01'.format(y+1)
+if use_big_time_windows:
+    # Training
+    start = '{}-01-01'.format(start_year)
+    mid = '{}-07-01'.format(start_year)
+    end = '{}-01-01'.format(start_year+1)
     date_tuple_list.append((start, mid, end))
 
-    if overlapping_windows and y+1 < end_year:
-        start = '{}-07-01'.format(y)
-        mid = '{}-01-01'.format(y+1)
-        end = '{}-07-01'.format(y+1)
+    # Test
+    start = '{}-01-01'.format(start_year+1)
+    mid = '{}-01-01'.format(end_year)
+    end = '{}-01-01'.format(end_year+1)
+    date_tuple_list.append(start, mid, end)
+
+else:
+    for y in range(start_year, end_year):
+        start = '{}-01-01'.format(y)
+        mid = '{}-07-01'.format(y)
+        end = '{}-01-01'.format(y+1)
         date_tuple_list.append((start, mid, end))
+
+        if overlapping_windows and y+1 < end_year:
+            start = '{}-07-01'.format(y)
+            mid = '{}-01-01'.format(y+1)
+            end = '{}-07-01'.format(y+1)
+            date_tuple_list.append((start, mid, end))
 
 if limit_windows == 'single':
     windows_list = [
