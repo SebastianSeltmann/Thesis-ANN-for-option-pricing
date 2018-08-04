@@ -29,7 +29,7 @@ collect_gradients_data = False
 # ----------------------------------
 # Data Preparation
 # ----------------------------------
-start_year = 2010
+start_year = 2007
 end_year = 2016
 annualization = 252
 stock_count_to_pick = 5
@@ -61,9 +61,9 @@ if os.path.isdir('D:/'):
     localpath = "D:\\Dropbox\\Studium\\Master\\Thesis\\neuralnet"
     onCluster = True
 
-elif os.path.isdir('/scratch/roklemm/option-pricing'):
-    rootpath = '/scratch/roklemm/option-pricing/'
-    localpath = '/scratch/roklemm/option-pricing/'
+elif os.path.isdir('/scratch/roklemm/option-pricing/sebbl_upload'):
+    rootpath = '/scratch/roklemm/option-pricing/sebbl_upload'
+    localpath = '/scratch/roklemm/option-pricing/sebbl_upload'
     onCluster = True
 else:
     rootpath = "C:\\AlgoTradingData\\"
