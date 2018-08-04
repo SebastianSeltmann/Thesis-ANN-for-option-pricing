@@ -119,7 +119,7 @@ def fetch_and_store_sp500():
 
     prices.to_csv(paths['raw prices'], sep='\t', encoding='utf-8')
 
-    store = pd.HDFStore(paths['h5 constituents & prices'])
+    store = pd.HDFStore(paths['prices_raw'])
     store['Compustat_const'] = const
     store['CRSP_const'] = crsp_id
     store['Prices_raw'] = prices
