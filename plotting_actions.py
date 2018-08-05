@@ -131,18 +131,18 @@ def plot_histogram_of_results_by_feature(runID=3):
     for feature in df.features.unique():
         print('{} - {}'.format(df.loc[df.features == feature].val_loss_mean.mean(), feature))
         idx = (df.features == feature)
-        idx &= (df.val_loss_mean < 0.0001)
+        #idx &= (df.val_loss_mean < 0.0001)
         pivotted_dict[feature] = list(df.loc[idx].val_loss_mean) + [None for x in range(50 - len(df.loc[idx]))]
 
-    idx = df_BS.MSE > 0.0001
-    pivotted_dict['BS'] = list(df_BS.MSE[idx]) + [None for x in range(50 - len(df_BS.loc[idx]))]
+    idx = df_BS.runID > 0
+    idx &= df_BS.MSE > 0.0001
+    pivotted_dict['BS'] = list(df_BS.loc[idx].MSE) + [None for x in range(50 - len(df_BS.loc[idx]))]
 
 
     pivotted_df = pd.DataFrame(pivotted_dict)
     # shorter_cols = [colname[15:] for colname in pivotted_df.columns]
     shorter_cols = []
     for i, colname in enumerate(pivotted_df.columns):
-        print(i)
         if colname == 'days_moneyness_r_v60_vix_returns_roa_capital_ratio_pe_op_dil':
             shorter_cols.append('(All)')
         elif colname == 'days_moneyness':
@@ -151,6 +151,8 @@ def plot_histogram_of_results_by_feature(runID=3):
             shorter_cols.append('BS')
         else:
             shorter_cols.append(colname[15:])
+
+    np.seterr(divide='ignore', invalid='ignore')
 
     x = np.array(pivotted_df)
     fig = plt.figure()
@@ -165,6 +167,14 @@ def plot_histogram_of_results_by_feature(runID=3):
     #BS_result.plot.kde()
     plt.legend(shorter_cols, ncol=2, shadow=True)
     plt.savefig('plots/MSE-distributions.png', bbox_inches="tight")
+    plt.show()
+
+    x = np.array(pivotted_df)
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.hist(x, label=shorter_cols, bins=500, cumulative=True, histtype='step')
+    ax.legend()
+    ax.set_xlim(right=0.0002)
     plt.show()
 
 
