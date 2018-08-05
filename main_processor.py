@@ -51,7 +51,8 @@ from config import (
     limit_windows,
     onCluster,
     collect_gradients_data,
-    useEarlyStopping
+    useEarlyStopping,
+    loss_func
 )
 from models import (
     full_model,
@@ -109,7 +110,7 @@ def perform_experiment():
     watches = ['model_name', 'time', 'optimizer', 'lr', 'epochs', 'features', 'activation', 'layers', 'nodes',
                'batch_normalization', 'loss', 'loss_oos', 'used_synth', 'normalize', 'dropout', 'batch_size',
                'failed', 'loss_mean', 'loss_std', 'val_loss_mean', 'val_loss_std', 'stock', 'dt_start', 'dt_middle',
-               'dt_end', 'duration', 'N_train', 'N_val', 'regularizer', 'earlyStopping']
+               'dt_end', 'duration', 'N_train', 'N_val', 'regularizer', 'useEarlyStopping', 'loss_func']
 
     cols = {col: [] for col in watches}
 
@@ -120,7 +121,7 @@ def perform_experiment():
                      len(active_feature_combinations),
                      window_combi_count,
                      identical_reruns,
-                     len(active_feature_combinations)*window_combi_count*identical_reruns
+                     settings_combi_count*window_combi_count*identical_reruns
                      ))
 
     # tt_start = datetime.now()
@@ -151,8 +152,8 @@ def perform_experiment():
             loss_oos = last_losses_mean = last_losses_std = last_val_losses_mean =\
                 last_val_losses_std = None
 
-            pattern = 'c{}_act_{}_l{}_n{}_o_{}_bn{}_do{}_s{}_no{}_bs{}'
-            model_name = pattern.format(c, act, l, n, optimizer, int(batch_normalization),
+            pattern = 'c{}_act_{}_lf{}_l{}_n{}_o_{}_bn{}_do{}_s{}_no{}_bs{}'
+            model_name = pattern.format(c, act, loss_func, l, n, optimizer, int(batch_normalization),
                                         int(dropout_rate*10), int(include_synthetic_data),
                                         normalization, batch_size)
 
@@ -170,7 +171,7 @@ def perform_experiment():
                 print(model_name, end=': ', flush=True)
 
                 model = full_model(input_dim=len(used_features), num_layers=l, nodes_per_layer=n,
-                                   loss='mean_squared_error', activation=act, optimizer=optimizer,
+                                   loss=loss_func, activation=act, optimizer=optimizer,
                                    use_batch_normalization=batch_normalization,
                                    dropout_rate=dropout_rate, regularizer=regularizer)
 
@@ -197,11 +198,11 @@ def perform_experiment():
             if lr is not None:
                 K.set_value(model.optimizer.lr, lr)
 
+            actual_epochs = epochs
             starting_time = datetime.now()
             starting_time_str = '{:%Y-%m-%d_%H-%M}'.format(starting_time)
 
-
-            _, initial_loss, _ = run_and_store_ANN(model=model, inSample=True, model_name='i_'+model_name+'_inSample',
+            initial_hist, initial_loss, _ = run_and_store_ANN(model=model, inSample=True, model_name='i_'+model_name+'_inSample',
                               nb_epochs=separate_initial_epochs, reset='yes', columns=used_features,
                               include_synth=include_synthetic_data, normalize=normalization, batch_size=batch_size,
                                                    data_package=data_package, starting_time_str=starting_time_str)
@@ -212,10 +213,12 @@ def perform_experiment():
                 print('FAILED', end=' ')
                 cols['failed'].append(int(True))
                 loss = initial_loss
+                if useEarlyStopping:
+                    actual_epochs = len(initial_hist.history['loss'])
 
             else:
                 cols['failed'].append(int(False))
-                _, loss, loss_tuple = run_and_store_ANN(model=model, inSample=True, model_name=model_name+'_inSample',
+                hist, loss, loss_tuple = run_and_store_ANN(model=model, inSample=True, model_name=model_name+'_inSample',
                                             nb_epochs=epochs - separate_initial_epochs, reset='continue',
                                             columns=used_features, get_deltas=True,
                                             include_synth=include_synthetic_data,
@@ -229,19 +232,21 @@ def perform_experiment():
                                                 columns=used_features, get_deltas=True,
                                                 normalize=normalization, batch_size=batch_size,
                                                    data_package=data_package, starting_time_str=starting_time_str)
-
+                if useEarlyStopping:
+                    actual_epochs = len(hist.history['loss'])+len(initial_hist.history['loss'])
 
                 (last_losses_mean, last_losses_std, last_val_losses_mean, last_val_losses_std) = loss_tuple
 
 
 
-                data = data_package[0]
+                data, _, _, _, scaler_X, scaler_Y = data_package
                 X_train = data[0]
                 X_val = data[2]
                 SSD_train = get_SSD(model, X_train)
                 SSD_val = get_SSD(model, X_val)
                 SSD_distribution_train.append(SSD_train)
                 SSD_distribution_val.append(SSD_val)
+
 
 
             model_end_time = datetime.now()
@@ -272,7 +277,7 @@ def perform_experiment():
             cols['val_loss_mean'].append(last_val_losses_mean)
             cols['val_loss_std'].append(last_val_losses_std)
 
-            cols['epochs'].append(epochs)
+            cols['epochs'].append(actual_epochs)
             cols['optimizer'].append(optimizer)
             cols['lr'].append(lr)
             cols['features'].append(feature_string)
@@ -280,6 +285,7 @@ def perform_experiment():
             cols['layers'].append(l)
             cols['nodes'].append(n)
             cols['batch_normalization'].append(batch_normalization)
+            cols['loss_func'].append(loss_func)
 
             cols['used_synth'].append(int(include_synthetic_data))
             cols['normalize'].append(normalization)
@@ -303,12 +309,23 @@ def perform_experiment():
             #     scatterplot_PAD(model, [X_train, X_val], i)
             if collect_gradients_data:
                 gradient_df_columns = ['model_name', 'time', 'sample', 'feature', 'feature_value', 'gradient']
+                #scaler_X, scaler_Y
                 grad_data = {key: [] for key in gradient_df_columns}
 
+                # X_train_rescaled = scaler_X.inverse_transform(X_train)
+                # X_val_rescaled = scaler_X.inverse_transform(X_val)
+                # X_train = pd.DataFrame(X_train_rescaled, index=X_train.index, columns=X_train.columns)
+                # X_val = pd.DataFrame(X_val_rescaled, index=X_val.index, columns=X_val.columns)
+
+                #sampling_dict = dict(train=X_train, test=X_val)
                 sampling_dict = dict(train=X_train, test=X_val)
+
                 for sample_key, points in sampling_dict.items():
 
                     gradients = get_gradients(model, points)
+                    rescaled = scaler_X.inverse_transform(points)
+                    points = pd.DataFrame(rescaled, index=points.index, columns=points.columns)
+
                     for feature_iloc, feature_name in enumerate(points.columns):
                         for value, gradient in zip(points.iloc[:, feature_iloc], gradients[:, feature_iloc]):
                             grad_data['model_name'].append(model_name)
@@ -317,6 +334,7 @@ def perform_experiment():
                             grad_data['feature'].append(feature_name)
                             grad_data['feature_value'].append(value)
                             grad_data['gradient'].append(gradient)
+
 
                         # for i, var in enumerate(points.columns):
                         #     x = np.array(points.iloc[:, i])
@@ -340,7 +358,7 @@ def perform_experiment():
             tf.reset_default_graph()
 
         if j >= 5:
-            if not onCluster:
+            if not onCluster and len(used_features) > 3:
                 boxplot_SSD_distribution(SSD_distribution_train, used_features, 'Training Data', model_name)
                 boxplot_SSD_distribution(SSD_distribution_val, used_features, 'Validation Data', model_name)
 
@@ -374,7 +392,7 @@ def perform_experiment():
     if run_BS_as_well:
         print('Running Black Scholes Benchmark')
 
-        BS_watches = ['stock', 'dt_start', 'dt_middle', 'dt_end', 'vol_proxy', 'MSE', 'MAE']
+        BS_watches = ['stock', 'dt_start', 'dt_middle', 'dt_end', 'vol_proxy', 'MSE', 'MAE', 'MAPE']
         BS_cols = {col: [] for col in BS_watches}
 
         j = 0
@@ -390,7 +408,7 @@ def perform_experiment():
                 end_train_start_val_date=dt_middle,
                 end_val_date=dt_end
             )
-            MSE, MAE = run_black_scholes(data_package, vol_proxy=vol_proxy)
+            MSE, MAE, MAPE = run_black_scholes(data_package, vol_proxy=vol_proxy)
 
             BS_cols['stock'].append(stock)
             BS_cols['dt_start'].append(dt_start)
@@ -399,6 +417,7 @@ def perform_experiment():
             BS_cols['vol_proxy'].append(vol_proxy)
             BS_cols['MSE'].append(MSE)
             BS_cols['MAE'].append(MAE)
+            BS_cols['MAPE'].append(MAPE)
 
         BS_results_df = pd.DataFrame(BS_cols)
 

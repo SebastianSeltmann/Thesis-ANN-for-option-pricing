@@ -7,7 +7,8 @@ from config import (
     identical_reruns,
     overlapping_windows,
     limit_windows,
-    use_big_time_windows
+    use_big_time_windows,
+    stock_count_to_pick
 )
 
 with pd.HDFStore(paths['options_for_ann']) as store:
@@ -20,8 +21,8 @@ with pd.HDFStore(paths['options_for_ann']) as store:
     availability_summary = store['availability_summary']
 
 
-selected_stocks = list(availability_summary.index)
-some_stock = selected_stocks[2]
+selected_stocks = list(availability_summary.index)[0:stock_count_to_pick]
+some_stock = selected_stocks[0]
 
 date_tuple_list = []
 if use_big_time_windows:
@@ -33,9 +34,9 @@ if use_big_time_windows:
 
     # Test
     start = '{}-01-01'.format(start_year+1)
-    mid = '{}-01-01'.format(end_year)
-    end = '{}-01-01'.format(end_year+1)
-    date_tuple_list.append(start, mid, end)
+    mid = '{}-07-01'.format(end_year-1)
+    end = '{}-01-01'.format(end_year)
+    date_tuple_list.append((start, mid, end))
 
 else:
     for y in range(start_year, end_year):

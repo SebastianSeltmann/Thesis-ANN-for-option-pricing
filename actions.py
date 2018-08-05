@@ -279,10 +279,10 @@ def run_and_store_ANN(model, inSample=False, reset='yes', nb_epochs=5, data_pack
         if store_primitive_performance_metrics:
             store[model_name] = sample
 
-    if len(loss)> 0:
-        success = loss[-1] < required_precision
-    else: success = True
-    return success, last_loss, loss_tuple
+    # if len(loss)> 0:
+    #     success = loss[-1] < required_precision
+    # else: success = True
+    return history, last_loss, loss_tuple
 
 
 class TrainValTensorBoard(TensorBoard):
@@ -388,7 +388,7 @@ def run(model,
         callbacks.append(TrainValTensorBoard(write_graph=False, log_dir="logs\\{}_{}".format(model_name, starting_time_str)))
 
     if useEarlyStopping:
-        callbacks.append(EarlyStopping(monitor='val_loss', min_delta=0, patience=3, verbose=0, mode='auto'))
+        callbacks.append(EarlyStopping(monitor='val_loss', min_delta=0, patience=20, verbose=0, mode='auto'))
 
 
     # validation_data = None
@@ -525,6 +525,7 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
 
     MAE = results.error.abs().mean()
     MSE = results.error.pow(2).mean()
+    MAPE = (results.error / results.scaled_option_price).abs().mean()
 
     '''
     b = results.loc[results.error.abs() == results.error.abs().max()].iloc[0]
@@ -539,4 +540,4 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
     df['p'] = df.d1.apply(norm.cdf)*X_test.moneyness.values - df.d2.apply(norm.cdf)*np.exp(-X_test.r*X_test.v60).values
     '''
 
-    return MSE, MAE
+    return MSE, MAE, MAPE

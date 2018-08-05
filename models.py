@@ -39,7 +39,7 @@ def deep_model(layers=5, nodes_per_layer = 200, loss='mse', activation='relu'):
     return model
 
 
-def full_model(input_dim=2, num_layers=5, nodes_per_layer = 200, loss='mse', activation='relu', optimizer='adam',
+def full_model(input_dim=2, num_layers=5, nodes_per_layer = 200, loss='mape', activation='relu', optimizer='adam',
                dropout_rate=0, use_batch_normalization=False, regularizer=None):
     model = Sequential()
     if regularizer == 'l1':
@@ -55,7 +55,9 @@ def full_model(input_dim=2, num_layers=5, nodes_per_layer = 200, loss='mse', act
             model.add(layers.BatchNormalization())
         model.add(Dense(nodes_per_layer, kernel_initializer='RandomNormal', activation=activation))
     model.add(Dense(1, kernel_initializer='normal'))
-    model.compile(optimizer=optimizer, loss=loss, metrics=['mae', 'mape'])
+    metrics = ['mse', 'mae', 'mape']
+    metrics.remove(loss)
+    model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
     model.save_weights(paths['weights'])
     if not onCluster:
         plot_model(model, to_file='model-diagrams/model-f.png')

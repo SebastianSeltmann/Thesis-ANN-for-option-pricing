@@ -24,12 +24,12 @@ seed_tf(random_seed)
 # Output for Latex
 # ----------------------------------
 saveResultsForLatex = True
-collect_gradients_data = False
+collect_gradients_data = True
 
 # ----------------------------------
 # Data Preparation
 # ----------------------------------
-start_year = 2007
+start_year = 2010
 end_year = 2016
 annualization = 252
 stock_count_to_pick = 5
@@ -38,7 +38,7 @@ do_redownload_all_data = False
 overlapping_windows = True
 # window_limiters = ['single', 'hyper-param-search', 'final-testing', 'no', 'mock-testing']
 limit_windows = 'final-testing'
-use_big_time_windows = True
+use_big_time_windows = False
 
 fundamental_columns_to_include = [
     'permno',
@@ -59,7 +59,7 @@ fundamental_columns_to_include = [
 if os.path.isdir('D:/'):
     rootpath = "D:\\AlgoTradingData\\"
     localpath = "D:\\Dropbox\\Studium\\Master\\Thesis\\neuralnet"
-    onCluster = True
+    onCluster = False
 
 elif os.path.isdir('/scratch/roklemm/option-pricing/sebbl_upload'):
     rootpath = '/scratch/roklemm/option-pricing/sebbl_upload'
@@ -147,8 +147,18 @@ active_feature_combinations = list(range(len(full_feature_combination_list)))
 # ----------------------------------
 # Hyperparameters
 # ----------------------------------
-required_precision = 0.01 # if this is not reached during initial training, the run is declared "failed", saving time
-epochs = 500
+epochs = 800
+loss_func = 'mae'
+# if required_precision is not reached during initial training, the run is declared "failed", saving time
+if loss_func == 'mape':
+    required_precision = 10**5
+elif loss_func == 'mse':
+    required_precision = 0.01
+elif loss_func == 'mae':
+    required_precision = 0.1
+else:
+    raise ValueError
+
 separate_initial_epochs = int(epochs / 10)
 lr = None  # 0.0001
 batch_normalization = False
@@ -158,10 +168,10 @@ useEarlyStopping = True
 identical_reruns = 1
 
 activations = ['relu']  # 'tanh'
-number_of_nodes = [250]
-number_of_layers = [3]
+number_of_nodes = [30] # [250]
+number_of_layers = [3] # [3]
 optimizers = ['adam']
-include_synthetic_datas = [True, False]
+include_synthetic_datas = [True]
 dropout_rates = [0.1]
 batch_sizes = [500]  # 100,
 normalizations = ['mmscaler']  # 'no', 'rscaler', 'sscaler',
