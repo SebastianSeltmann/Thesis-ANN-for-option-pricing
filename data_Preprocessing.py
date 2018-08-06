@@ -16,7 +16,8 @@ from config import (
     fundamental_columns_to_include,
     stock_count_to_pick,
     annualization,
-    onCluster
+    onCluster,
+    optional_features
 )
 
 if not onCluster:
@@ -658,7 +659,8 @@ def generate_synthetic_data(option_type='call'):
     if option_type != 'call' and option_type != 'put':
         ValueError("option_type must be either 'call' or 'put'")
 
-    additional_columns = ['roe', 'roa', 'capital_ratio', 'pe_op_basic', 'pe_op_dil']
+    # additional_columns = ['roe', 'roa', 'capital_ratio', 'pe_op_basic', 'pe_op_dil']
+    additional_columns = optional_features
 
 
 
