@@ -71,29 +71,29 @@ else:
     onCluster = False
 
 paths = {}
-paths['data_for_latex'] = rootpath + "data_for_latex.h5"
+paths['data_for_latex'] = os.path.join(rootpath,"data_for_latex.h5")
 
-paths['options_for_ann'] = rootpath + "options_for_ann.h5"
-paths['weights'] = rootpath + "weights.h5"
-paths['neural_net_output'] = rootpath + "ANN-output.h5"
-paths['model_overfit'] = rootpath + "overfit_model.h5"
-paths['model_mape'] = rootpath + "mape_model.h5"
-paths['model_deep'] = rootpath + "deep_model.h5"
-paths['model_best'] = rootpath + "model_currently_best.h5"
+paths['options_for_ann'] = os.path.join(rootpath,"options_for_ann.h5")
+paths['weights'] = os.path.join(rootpath,"weights.h5")
+paths['neural_net_output'] = os.path.join(rootpath,"ANN-output.h5")
+paths['model_overfit'] = os.path.join(rootpath,"overfit_model.h5")
+paths['model_mape'] = os.path.join(rootpath,"mape_model.h5")
+paths['model_deep'] = os.path.join(rootpath,"deep_model.h5")
+paths['model_best'] = os.path.join(rootpath,"model_currently_best.h5")
 
 paths['results-excel'] = os.path.join(localpath, 'results_excel.xlsx')
 paths['results-excel-BS'] = os.path.join(localpath, 'results_excel-BS.xlsx')
-paths['gradients_data'] = rootpath + 'gradients_data.h5'
+paths['gradients_data'] = os.path.join(rootpath,'gradients_data.h5')
 paths['all_models'] = os.path.join(rootpath, 'all_models', '{:%Y-%m-%d_%H-%M}'.format(datetime.now()))
 
 
-paths['prices_raw'] = rootpath + "prices.h5"
-paths['all_options_h5'] = rootpath + "all_options.h5"
-paths['treasury'] = rootpath + '3months-treasury.h5'
-paths['vix'] = rootpath + 'vix.h5'
-paths['dividends'] = rootpath + 'dividends.h5'
-paths['ratios'] = rootpath + 'ratios.h5'
-paths['names'] = rootpath + 'names.h5'
+paths['prices_raw'] = os.path.join(rootpath, "prices.h5")
+paths['all_options_h5'] = os.path.join(rootpath,"all_options.h5")
+paths['treasury'] = os.path.join(rootpath,'3months-treasury.h5')
+paths['vix'] = os.path.join(rootpath,'vix.h5')
+paths['dividends'] = os.path.join(rootpath,'dividends.h5')
+paths['ratios'] = os.path.join(rootpath,'ratios.h5')
+paths['names'] = os.path.join(rootpath,'names.h5')
 paths['options'] = []
 for y in range(1996, 2017):
     paths['options'].append(os.path.join(rootpath, "OptionsData", "rawopt_" + str(y) + "AllIndices.csv"))
