@@ -429,7 +429,7 @@ merged.rename(index=str, columns={"Value": "r"}, inplace=True)
 
 gc.collect()
 
-pd.merge(merged, vix, left_on='date', right_on='date')# vix.columns
+merged = pd.merge(merged, vix, left_on='date', right_on='date')# vix.columns
 
 '''
 gc.collect()
