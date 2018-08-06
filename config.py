@@ -24,7 +24,7 @@ seed_tf(random_seed)
 # Output for Latex
 # ----------------------------------
 saveResultsForLatex = True
-collect_gradients_data = True
+collect_gradients_data = False
 
 # ----------------------------------
 # Data Preparation
@@ -87,7 +87,7 @@ paths['gradients_data'] = rootpath + 'gradients_data.h5'
 paths['all_models'] = os.path.join(rootpath, 'all_models', '{:%Y-%m-%d_%H-%M}'.format(datetime.now()))
 
 
-paths['prices_raw'] = rootpath + "Data[IDs, constituents, prices].h5"
+paths['prices_raw'] = rootpath + "prices.h5"
 paths['all_options_h5'] = rootpath + "all_options.h5"
 paths['treasury'] = rootpath + '3months-treasury.h5'
 paths['vix'] = rootpath + 'vix.h5'
@@ -148,7 +148,7 @@ active_feature_combinations = list(range(len(full_feature_combination_list)))
 # Hyperparameters
 # ----------------------------------
 epochs = 800
-loss_func = 'mae'
+loss_func = 'mse'
 # if required_precision is not reached during initial training, the run is declared "failed", saving time
 if loss_func == 'mape':
     required_precision = 10**5
@@ -168,10 +168,10 @@ useEarlyStopping = True
 identical_reruns = 1
 
 activations = ['relu']  # 'tanh'
-number_of_nodes = [30] # [250]
+number_of_nodes = [50] # [250]
 number_of_layers = [3] # [3]
 optimizers = ['adam']
-include_synthetic_datas = [True]
+include_synthetic_datas = [True, False]
 dropout_rates = [0.1]
 batch_sizes = [500]  # 100,
 normalizations = ['mmscaler']  # 'no', 'rscaler', 'sscaler',
