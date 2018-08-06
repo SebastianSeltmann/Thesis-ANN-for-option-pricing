@@ -428,7 +428,7 @@ merged.drop(['Date'], axis=1, inplace=True)
 merged.rename(index=str, columns={"Value": "r"}, inplace=True)
 
 gc.collect()
-
+vix['date'] = pd.to_datetime(vix['date'])
 merged = pd.merge(merged, vix, left_on='date', right_on='date')# vix.columns
 
 '''
