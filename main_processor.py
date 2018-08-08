@@ -364,16 +364,19 @@ def perform_experiment():
                     boxplot_SSD_distribution(SSD_distribution_val, used_features, 'Validation Data', model_name)
 
                 if saveResultsForLatex:
-                    with pd.HDFStore(paths['data_for_latex']) as store:
-                        previous_results = store['SSDD_df']
-
                     SSDD_df_train = pd.DataFrame(SSD_distribution_val, columns=used_features)
                     SSDD_df_val = pd.DataFrame(SSD_distribution_val, columns=used_features)
                     SSDD_df_train['sample'] = 'train'
                     SSDD_df_val['sample'] = 'test'
                     merged_results = pd.concat([SSDD_df_train, SSDD_df_val])
                     merged_results['runID'] = runID
-                    merged_results = pd.concat([merged_results, previous_results])
+
+                    try:
+                        with pd.HDFStore(paths['data_for_latex']) as store:
+                            previous_results = store['SSDD_df']
+                            merged_results = pd.concat([merged_results, previous_results])
+                    except:
+                        pass
 
                     with pd.HDFStore(paths['data_for_latex']) as store:
                         store['SSDD_df'] = merged_results
