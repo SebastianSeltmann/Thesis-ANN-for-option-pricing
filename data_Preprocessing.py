@@ -664,25 +664,9 @@ def generate_synthetic_data(option_type='call'):
 
 
 
-    means = {
-        'returns': data.returns.mean(),
-        'v110': data.v110.mean(),
-        'v60': data.v60.mean(),
-        'v20': data.v20.mean(),
-        'v5': data.v5.mean(),
-        'r': data.r.mean(),
-        'vix': data.vix.mean(),
-    }
+    means = {}
+    stds = {}
 
-    stds = {
-        'returns': data.returns.std(),
-        'v110': data.v110.std(),
-        'v60': data.v60.std(),
-        'v20': data.v20.std(),
-        'v5': data.v5.std(),
-        'r': data.r.std(),
-        'vix': data.vix.std(),
-    }
     for column in additional_columns:
         means[column] = data[column].mean()
         stds[column] = data[column].std()
@@ -696,6 +680,8 @@ def generate_synthetic_data(option_type='call'):
     for K in range(10, int(S * 1.5), 10):
         for i in range(0, 10):
             days = 0
+            additional_column_values = [np.random.randn() * stds[column] + means[column] for column in additional_columns]
+
             if option_type == 'call':
                 option_price = max(0, S - K)
                 if S > K:
@@ -714,15 +700,7 @@ def generate_synthetic_data(option_type='call'):
                     delta = -0.5
             strike_price = K
             prc = S
-            returns = np.random.randn() * stds['returns'] + means['returns']
-            v110 = np.random.randn() * stds['v110'] + means['v110']
-            v60 = np.random.randn() * stds['v60'] + means['v60']
-            v20 = np.random.randn() * stds['v20'] + means['v20']
-            v5 = np.random.randn() * stds['v5'] + means['v5']
-            r = np.random.randn() * stds['r'] + means['r']
-            vix = np.random.randn() * stds['vix'] + means['vix']
 
-            additional_column_values = [np.random.randn() * stds[column] + means[column] for column in additional_columns]
 
             moneyness = S / K
             scaled_option_price = option_price / K
@@ -730,8 +708,7 @@ def generate_synthetic_data(option_type='call'):
             dummy_values = [0] * len(complete_dummy_list)
             dummy_values[np.random.randint(49)] = 1
 
-            new_row = [days, option_price, impl_volatility, hist_impl_volatility, delta, strike_price, prc, returns, v110, v60, v20,
-                               v5, r, moneyness, scaled_option_price, vix]
+            new_row = [days, option_price, impl_volatility, hist_impl_volatility, delta, strike_price, prc, moneyness, scaled_option_price]
             new_row += dummy_values
             new_row += additional_column_values
 
@@ -745,19 +722,12 @@ def generate_synthetic_data(option_type='call'):
             days = days / 365
             strike_price = K
             prc = S
-            returns = np.random.randn() * stds['returns'] + means['returns']
-            v110 = np.random.randn() * stds['v110'] + means['v110']
-            v60 = np.random.randn() * stds['v60'] + means['v60']
-            v20 = np.random.randn() * stds['v20'] + means['v20']
-            v5 = np.random.randn() * stds['v5'] + means['v5']
-            r = np.random.randn() * stds['r'] + means['r']
-            vix = np.random.randn() * stds['vix'] + means['vix']
             moneyness = 0
             additional_column_values = [np.random.randn() * stds[column] + means[column] for column in additional_columns]
-
+            r = additional_column_values[additional_columns.index('r')]
             if option_type == 'call':
                 # Sketchy: risk-free rate should be interpolated to match maturity
-                option_price = 0 * np.exp(-r * days)
+                option_price = 0
                 delta = 0
             else:
                 option_price = strike_price * np.exp(-r * days)
@@ -767,8 +737,7 @@ def generate_synthetic_data(option_type='call'):
 
             dummy_values = [0] * len(complete_dummy_list)
             dummy_values[np.random.randint(49)] = 1
-            new_row = [days, option_price, impl_volatility, hist_impl_volatility, delta, strike_price, prc, returns, v110, v60, v20,
-                               v5, r, moneyness, scaled_option_price, vix]
+            new_row = [days, option_price, impl_volatility, hist_impl_volatility, delta, strike_price, prc, moneyness, scaled_option_price]
             new_row += dummy_values
             new_row += additional_column_values
 
@@ -782,19 +751,13 @@ def generate_synthetic_data(option_type='call'):
 
             strike_price = K
             prc = S
-            returns = np.random.randn() * stds['returns'] + means['returns']
-            v110 = np.random.randn() * stds['v110'] + means['v110']
-            v60 = np.random.randn() * stds['v60'] + means['v60']
-            v20 = np.random.randn() * stds['v20'] + means['v20']
-            v5 = np.random.randn() * stds['v5'] + means['v5']
-            r = np.random.randn() * stds['r'] + means['r']
-            vix = np.random.randn() * stds['vix'] + means['vix']
             moneyness = S / K
             additional_column_values = [np.random.randn() * stds[column] + means[column] for column in additional_columns]
+            r = additional_column_values[additional_columns.index('r')]
 
             if option_type == 'call':
                 # Sketchy: risk-free rate should be interpolated to match maturity
-                option_price = S * np.exp(-r * days)
+                option_price = S - K * np.exp(-r * days)
                 delta = 1
             else:
                 option_price = 0
@@ -804,16 +767,14 @@ def generate_synthetic_data(option_type='call'):
 
             dummy_values = [0] * len(complete_dummy_list)
             dummy_values[np.random.randint(49)] = 1
-            new_row = [days, option_price, impl_volatility, hist_impl_volatility, delta, strike_price, prc, returns, v110, v60, v20,
-                               v5, r, moneyness, scaled_option_price, vix]
+            new_row = [days, option_price, impl_volatility, hist_impl_volatility, delta, strike_price, prc, moneyness, scaled_option_price]
             new_row += dummy_values
             new_row += additional_column_values
 
             synth_list.append(new_row)
 
     synth_df = pd.DataFrame(synth_list, columns=['days', 'option_price', 'impl_volatility', 'hist_impl_volatility', 'delta', 'strike_price',
-                                                 'prc', 'returns', 'v110', 'v60', 'v20', 'v5', 'r', 'moneyness',
-                                                 'scaled_option_price', 'vix'] + complete_dummy_list + additional_columns)
+                                                 'prc', 'moneyness', 'scaled_option_price'] + complete_dummy_list + additional_columns)
     # Shuffling the order of the rows
     synth_df = synth_df.sample(frac=1)
 
