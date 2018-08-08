@@ -113,6 +113,11 @@ def perform_experiment():
     # tt_end = datetime.now()
     # print((tt_end - tt_start).seconds, end=' a- ')
     # tt_start = datetime.now()
+    try:
+        with pd.ExcelFile(paths['results-excel']) as reader:
+            runID = reader.parse("RunData")['runID'].max() + 1
+    except:
+        runID = 1
 
     if run_BS != 'only_BS':
 
@@ -309,17 +314,13 @@ def perform_experiment():
 
                 # if rerun_id == 0:
                 #     scatterplot_PAD(model, [X_train, X_val], i)
-                if collect_gradients_data:
-                    gradient_df_columns = ['model_name', 'time', 'sample', 'feature', 'feature_value', 'gradient']
+                is_All_or_None_Run = len(used_features).isin([2, len(full_feature_combination_list[-1])])
+                if collect_gradients_data and is_All_or_None_Run:
+                    gradient_df_columns = ['model_name', 'time', 'sample', 'feature', 'feature_value', 'gradient',
+                                           'stock', 'dt_start', 'runID']
                     #scaler_X, scaler_Y
                     grad_data = {key: [] for key in gradient_df_columns}
 
-                    # X_train_rescaled = scaler_X.inverse_transform(X_train)
-                    # X_val_rescaled = scaler_X.inverse_transform(X_val)
-                    # X_train = pd.DataFrame(X_train_rescaled, index=X_train.index, columns=X_train.columns)
-                    # X_val = pd.DataFrame(X_val_rescaled, index=X_val.index, columns=X_val.columns)
-
-                    #sampling_dict = dict(train=X_train, test=X_val)
                     sampling_dict = dict(train=X_train, test=X_val)
 
                     for sample_key, points in sampling_dict.items():
@@ -336,11 +337,9 @@ def perform_experiment():
                                 grad_data['feature'].append(feature_name)
                                 grad_data['feature_value'].append(value)
                                 grad_data['gradient'].append(gradient)
-
-
-                            # for i, var in enumerate(points.columns):
-                            #     x = np.array(points.iloc[:, i])
-                            #     y = gradients[:, i]
+                                grad_data['stock'].append(stock)
+                                grad_data['dt_start'].append(dt_start)
+                                grad_data['runID'].append(runID)
 
                     gradients_df = pd.DataFrame(grad_data)
 
@@ -360,29 +359,38 @@ def perform_experiment():
                 tf.reset_default_graph()
 
             if j >= 5:
-                if not onCluster and len(used_features) > 3:
+                if not onCluster and len(used_features) > 4:
                     boxplot_SSD_distribution(SSD_distribution_train, used_features, 'Training Data', model_name)
                     boxplot_SSD_distribution(SSD_distribution_val, used_features, 'Validation Data', model_name)
 
                 if saveResultsForLatex:
-                    SSDD_df = pd.DataFrame(SSD_distribution_val, columns=used_features)
+                    with pd.HDFStore(paths['data_for_latex']) as store:
+                        previous_results = store['SSDD_df']
 
-                    key = 'SSDD_df' if i == 1 else 'SSDD_df_{}'.format(i)
+                    SSDD_df_train = pd.DataFrame(SSD_distribution_val, columns=used_features)
+                    SSDD_df_val = pd.DataFrame(SSD_distribution_val, columns=used_features)
+                    SSDD_df_train['sample'] = 'train'
+                    SSDD_df_val['sample'] = 'test'
+                    merged_results = pd.concat([SSDD_df_train, SSDD_df_val])
+                    merged_results['runID'] = runID
+                    merged_results = pd.concat([merged_results, previous_results])
 
                     with pd.HDFStore(paths['data_for_latex']) as store:
-                        store[key] = SSDD_df
+                        store['SSDD_df'] = merged_results
+
+                    # key = 'SSDD_df' if i == 1 else 'SSDD_df_{}'.format(i)
+                    # with pd.HDFStore(paths['data_for_latex']) as store:
+                    #     store[key] = SSDD_df
 
         results_df = pd.DataFrame(cols)
+        results_df['runID'] = runID
 
         if limit_windows != 'mock-testing':
             try:
                 with pd.ExcelFile(paths['results-excel']) as reader:
                     previous_results = reader.parse("RunData")
-                runID = previous_results['runID'].max()+1
-                results_df['runID'] = runID
                 merged_results = pd.concat([results_df, previous_results])
             except:
-                results_df['runID'] = 1
                 merged_results = results_df
 
             with pd.ExcelWriter(paths['results-excel']) as writer:
