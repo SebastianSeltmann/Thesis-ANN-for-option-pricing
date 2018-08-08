@@ -314,7 +314,7 @@ def perform_experiment():
 
                 # if rerun_id == 0:
                 #     scatterplot_PAD(model, [X_train, X_val], i)
-                is_All_or_None_Run = len(used_features).isin([2, len(full_feature_combination_list[-1])])
+                is_All_or_None_Run = len(used_features) in ([2, len(full_feature_combination_list[-1])])
                 if collect_gradients_data and is_All_or_None_Run:
                     gradient_df_columns = ['model_name', 'time', 'sample', 'feature', 'feature_value', 'gradient',
                                            'stock', 'dt_start', 'runID']
