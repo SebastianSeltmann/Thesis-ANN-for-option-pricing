@@ -3,7 +3,7 @@ import numpy as np
 from sklearn import preprocessing
 from scipy.stats import norm
 from time import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 
 import tensorflow as tf
@@ -13,7 +13,7 @@ from keras.callbacks import TensorBoard, EarlyStopping
 
 from matplotlib import pyplot as plt
 
-from config import paths, required_precision, onCluster, useEarlyStopping
+from config import paths, required_precision, onCluster, useEarlyStopping, cd_of_quotes_to_consider_for_vol_surf
 
 from data import (
     data as dataset,
@@ -488,6 +488,11 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
     X_train.days = X_train.days / 365
     X_test.days = X_test.days / 365
 
+
+    df = pd.concat([X_train, X_test])
+    dateIndex = df.index.get_level_values(0)
+
+
     def black_scholes_pricer(m, t, r, s, optiontype='call'):
         d1 = 1 / (s * (t ** (1 / 2))) * (np.log(m) + (r + (s ** 2) / 2) * t)
         d2 = d1 - s * t ** (1 / 2)
@@ -503,16 +508,23 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
 
     def BS_predict(point):
         days, moneyness, hist_impl_volatility, v60, r = tuple(point)
+        date = point.name[0]
         if vol_proxy == 'hist_implied':
             vola = hist_impl_volatility
         elif vol_proxy == 'hist_realized':
             vola = v60
+        elif vol_proxy == 'surface':
+            # idx = df.isin(dateIndex.unique()[-11:-1])
+            idx = (dateIndex < date) & (dateIndex > date - timedelta(days=cd_of_quotes_to_consider_for_vol_surf))
+            relevant_quotes = df.loc[idx]
+            vola = bilinear_vsurface_interpolation(relevant_quotes, days, moneyness)
         else:
             raise ValueError
         result = black_scholes_pricer(moneyness, days, r, vola)
         return pd.Series(result, index=['price', 'delta'])
 
     prediction = X_test.apply(BS_predict, axis=1)
+
 
     results = X_test.copy()
     results['scaled_option_price'] = Y_test['scaled_option_price']
@@ -541,3 +553,74 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
     '''
 
     return MSE, MAE, MAPE
+
+
+
+def bilinear_vsurface_interpolation(quotes, ttm, mon):
+
+    quotes = quotes.sort_values('days', ascending=False)
+
+    later_than = quotes.loc[quotes.days <= ttm]
+    earlier_than = quotes.loc[quotes.days >= ttm]
+
+    if len(later_than) == 0:
+        later_than = earlier_than.sort_values('days', ascending=False).iloc[0]
+        interp_later = later_than.loc[['impl_volatility', 'days']]
+    else:
+        lower_than_later = later_than.loc[later_than.moneyness <= mon]
+        higher_than_later = later_than.loc[later_than.moneyness >= mon]
+
+        if len(lower_than_later) == 0:
+            higher_than_later = higher_than_later.sort_values('moneyness', ascending=False).iloc[-1]
+            interp_later = higher_than_later.loc[['impl_volatility', 'days']]
+        elif len(higher_than_later) == 0:
+            lower_than_later = lower_than_later.sort_values('moneyness', ascending=False).iloc[0]
+            interp_later = lower_than_later.loc[['impl_volatility', 'days']]
+        else:
+            lower_than_later = lower_than_later.sort_values('moneyness', ascending=False).iloc[0]
+            higher_than_later = higher_than_later.sort_values('moneyness', ascending=False).iloc[-1]
+
+            later_ratio = (mon - lower_than_later.moneyness) / (higher_than_later.moneyness - lower_than_later.moneyness)
+            interp_later = (
+                    lower_than_later.loc[['impl_volatility', 'days']] * (1 - later_ratio)
+                    + higher_than_later.loc[['impl_volatility', 'days']] * later_ratio
+            )
+    if len(earlier_than) == 0:
+        earlier_than = later_than.sort_values('days', ascending=False).iloc[-1]
+        interp_earlier = earlier_than.loc[['impl_volatility', 'days']]
+    else:
+        lower_than_earlier = earlier_than.loc[earlier_than.moneyness <= mon]
+        higher_than_earlier = earlier_than.loc[earlier_than.moneyness >= mon]
+
+
+        if len(lower_than_earlier) == 0:
+            higher_than_earlier = higher_than_earlier.sort_values('moneyness', ascending=False).iloc[-1]
+            interp_earlier = higher_than_earlier.loc[['impl_volatility', 'days']]
+        elif len(higher_than_earlier) == 0:
+            lower_than_earlier = lower_than_earlier.sort_values('moneyness', ascending=False).iloc[0]
+            interp_earlier = lower_than_earlier.loc[['impl_volatility', 'days']]
+        else:
+            lower_than_earlier = lower_than_earlier.sort_values('moneyness', ascending=False).iloc[0]
+            higher_than_earlier = higher_than_earlier.sort_values('moneyness', ascending=False).iloc[-1]
+
+            earlier_ratio = (mon - lower_than_earlier.moneyness) / (
+                        higher_than_earlier.moneyness - lower_than_earlier.moneyness)
+            interp_earlier = (
+                    lower_than_earlier.loc[['impl_volatility', 'days']] * (1 - earlier_ratio)
+                    + higher_than_earlier.loc[['impl_volatility', 'days']] * earlier_ratio
+            )
+
+    if interp_later.days == interp_earlier.days:
+        interp = interp_earlier.impl_volatility
+    else:
+        ratio = (ttm - interp_earlier.days) / (interp_later.days - interp_earlier.days)
+        if ratio > 1:
+            interp = interp_later.impl_volatility
+        elif ratio < 0:
+            interp = interp_earlier.impl_volatility
+        else:
+            interp = interp_earlier.impl_volatility * (1 - ratio) + interp_later.impl_volatility * ratio
+
+
+
+    return interp

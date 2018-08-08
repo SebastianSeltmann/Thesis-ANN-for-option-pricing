@@ -46,8 +46,8 @@ from config import (
     lr,
     epochs,
     saveResultsForLatex,
-    run_BS_as_well,
-    vol_proxy,
+    run_BS,
+    vol_proxies,
     limit_windows,
     onCluster,
     collect_gradients_data,
@@ -107,342 +107,355 @@ from data import (
 
 def perform_experiment():
 
-    watches = ['model_name', 'time', 'optimizer', 'lr', 'epochs', 'features', 'activation', 'layers', 'nodes',
-               'batch_normalization', 'loss', 'loss_oos', 'used_synth', 'normalize', 'dropout', 'batch_size',
-               'failed', 'loss_mean', 'loss_std', 'val_loss_mean', 'val_loss_std', 'stock', 'dt_start', 'dt_middle',
-               'dt_end', 'duration', 'N_train', 'N_val', 'regularizer', 'useEarlyStopping', 'loss_func']
-
-    cols = {col: [] for col in watches}
-
     interrupt_flag = False
-
-    msg = 'Evaluating {} different settings with {} feature combinations, in {} windows, each {} times for a total of {} runs.'
-    print(msg.format(int(settings_combi_count / len(active_feature_combinations)),
-                     len(active_feature_combinations),
-                     window_combi_count,
-                     identical_reruns,
-                     settings_combi_count*window_combi_count*identical_reruns
-                     ))
 
     # tt_start = datetime.now()
     # tt_end = datetime.now()
     # print((tt_end - tt_start).seconds, end=' a- ')
     # tt_start = datetime.now()
 
-    i = 0
-    for settings in itertools.product(*settings_list): # equivalent to a bunch of nested for-loops
-        i += 1
-        SSD_distribution_train = []
-        SSD_distribution_val = []
-        act, n, l, optimizer, include_synthetic_data, dropout_rate, normalization, batch_size, regularizer, c = settings
-        used_features = full_feature_combination_list[c]
-        if type(l) is tuple:
-            sl, il = l
-            l = sl + il
+    if run_BS != 'only_BS':
 
-        j = 0
-        for window in itertools.product(*windows_list):
-            j += 1
-            stock, date_tuple, rerun_id = window
-            dt_start, dt_middle, dt_end = date_tuple
+        msg = 'Evaluating {} different settings with {} feature combinations, in {} windows, each {} times for a total of {} runs.'
+        print(msg.format(int(settings_combi_count / len(active_feature_combinations)),
+                         len(active_feature_combinations),
+                         window_combi_count,
+                         identical_reruns,
+                         settings_combi_count * window_combi_count * identical_reruns
+                         ))
 
-            print('{}.{}'.format(i,j), end=' ', flush=True)
+        watches = ['model_name', 'time', 'optimizer', 'lr', 'epochs', 'features', 'activation', 'layers', 'nodes',
+                   'batch_normalization', 'loss', 'loss_oos', 'used_synth', 'normalize', 'dropout', 'batch_size',
+                   'failed', 'loss_mean', 'loss_std', 'val_loss_mean', 'val_loss_std', 'stock', 'dt_start', 'dt_middle',
+                   'dt_end', 'duration', 'N_train', 'N_val', 'regularizer', 'useEarlyStopping', 'loss_func']
 
-            # We reinitialize these variables to None because they will be appended to cols
-            loss_oos = last_losses_mean = last_losses_std = last_val_losses_mean =\
-                last_val_losses_std = None
+        cols = {col: [] for col in watches}
 
-            pattern = 'c{}_act_{}_lf{}_l{}_n{}_o_{}_bn{}_do{}_s{}_no{}_bs{}'
-            model_name = pattern.format(c, act, loss_func, l, n, optimizer, int(batch_normalization),
-                                        int(dropout_rate*10), int(include_synthetic_data),
-                                        normalization, batch_size)
+        i = 0
+        for settings in itertools.product(*settings_list): # equivalent to a bunch of nested for-loops
+            i += 1
+            SSD_distribution_train = []
+            SSD_distribution_val = []
+            act, n, l, optimizer, include_synthetic_data, dropout_rate, normalization, batch_size, regularizer, c = settings
+            used_features = full_feature_combination_list[c]
+            if type(l) is tuple:
+                sl, il = l
+                l = sl + il
 
+            j = 0
+            for window in itertools.product(*windows_list):
+                j += 1
+                stock, date_tuple, rerun_id = window
+                dt_start, dt_middle, dt_end = date_tuple
 
-            if multi_target:
-                model_name = 'multit_'+model_name
-                print(model_name, end=': ', flush=True)
+                print('{}.{}'.format(i,j), end=' ', flush=True)
 
-                model = multitask_model(input_dim=len(used_features), shared_layers=sl,
-                                        individual_layers=il, nodes_per_layer=n,
-                                        activation=act, use_batch_normalization=batch_normalization,
-                                        optimizer=optimizer)
-            else:
-                model_name = 'full_'+model_name
-                print(model_name, end=': ', flush=True)
+                # We reinitialize these variables to None because they will be appended to cols
+                loss_oos = last_losses_mean = last_losses_std = last_val_losses_mean =\
+                    last_val_losses_std = None
 
-                model = full_model(input_dim=len(used_features), num_layers=l, nodes_per_layer=n,
-                                   loss=loss_func, activation=act, optimizer=optimizer,
-                                   use_batch_normalization=batch_normalization,
-                                   dropout_rate=dropout_rate, regularizer=regularizer)
-
-            model.name = model_name
+                pattern = 'c{}_act_{}_lf{}_l{}_n{}_o_{}_bn{}_do{}_s{}_no{}_bs{}'
+                model_name = pattern.format(c, act, loss_func, l, n, optimizer, int(batch_normalization),
+                                            int(dropout_rate*10), int(include_synthetic_data),
+                                            normalization, batch_size)
 
 
-            # when rerun_id is 0, that means we just switched to a new stock or date, or setting
-            # that is when we need to get the data again
-            if rerun_id == 0:
+                if multi_target:
+                    model_name = 'multit_'+model_name
+                    print(model_name, end=': ', flush=True)
 
-                data_package = get_data_package(
-                    model=model,
-                    columns=used_features,
-                    include_synth=include_synthetic_data,
-                    normalize=normalization,
-                    stock=stock,
-                    start_date=dt_start,
-                    end_train_start_val_date=dt_middle,
-                    end_val_date=dt_end
-                )
-                N_train = len(data_package[0][0])
-                N_val = len(data_package[0][2])
+                    model = multitask_model(input_dim=len(used_features), shared_layers=sl,
+                                            individual_layers=il, nodes_per_layer=n,
+                                            activation=act, use_batch_normalization=batch_normalization,
+                                            optimizer=optimizer)
+                else:
+                    model_name = 'full_'+model_name
+                    print(model_name, end=': ', flush=True)
 
-            if lr is not None:
-                K.set_value(model.optimizer.lr, lr)
+                    model = full_model(input_dim=len(used_features), num_layers=l, nodes_per_layer=n,
+                                       loss=loss_func, activation=act, optimizer=optimizer,
+                                       use_batch_normalization=batch_normalization,
+                                       dropout_rate=dropout_rate, regularizer=regularizer)
 
-            actual_epochs = epochs
-            starting_time = datetime.now()
-            starting_time_str = '{:%Y-%m-%d_%H-%M}'.format(starting_time)
-
-            initial_hist, initial_loss, _ = run_and_store_ANN(model=model, inSample=True, model_name='i_'+model_name+'_inSample',
-                              nb_epochs=separate_initial_epochs, reset='yes', columns=used_features,
-                              include_synth=include_synthetic_data, normalize=normalization, batch_size=batch_size,
-                                                   data_package=data_package, starting_time_str=starting_time_str)
+                model.name = model_name
 
 
+                # when rerun_id is 0, that means we just switched to a new stock or date, or setting
+                # that is when we need to get the data again
+                if rerun_id == 0:
 
-            if initial_loss > required_precision:
-                print('FAILED', end=' ')
-                cols['failed'].append(int(True))
-                loss = initial_loss
-                if useEarlyStopping:
-                    actual_epochs = len(initial_hist.history['loss'])
+                    data_package = get_data_package(
+                        model=model,
+                        columns=used_features,
+                        include_synth=include_synthetic_data,
+                        normalize=normalization,
+                        stock=stock,
+                        start_date=dt_start,
+                        end_train_start_val_date=dt_middle,
+                        end_val_date=dt_end
+                    )
+                    N_train = len(data_package[0][0])
+                    N_val = len(data_package[0][2])
 
-            else:
-                cols['failed'].append(int(False))
-                hist, loss, loss_tuple = run_and_store_ANN(model=model, inSample=True, model_name=model_name+'_inSample',
-                                            nb_epochs=epochs - separate_initial_epochs, reset='continue',
-                                            columns=used_features, get_deltas=True,
-                                            include_synth=include_synthetic_data,
-                                            normalize=normalization, batch_size=batch_size,
-                                                        data_package=data_package, starting_time_str=starting_time_str)
+                if lr is not None:
+                    K.set_value(model.optimizer.lr, lr)
+
+                actual_epochs = epochs
+                starting_time = datetime.now()
+                starting_time_str = '{:%Y-%m-%d_%H-%M}'.format(starting_time)
+
+                initial_hist, initial_loss, _ = run_and_store_ANN(model=model, inSample=True, model_name='i_'+model_name+'_inSample',
+                                  nb_epochs=separate_initial_epochs, reset='yes', columns=used_features,
+                                  include_synth=include_synthetic_data, normalize=normalization, batch_size=batch_size,
+                                                       data_package=data_package, starting_time_str=starting_time_str)
 
 
 
-                _, loss_oos, _ = run_and_store_ANN(model=model, inSample=False,
-                                                model_name=model_name+'_outSample', reset='reuse',
+                if initial_loss > required_precision:
+                    print('FAILED', end=' ')
+                    cols['failed'].append(int(True))
+                    loss = initial_loss
+                    if useEarlyStopping:
+                        actual_epochs = len(initial_hist.history['loss'])
+
+                else:
+                    cols['failed'].append(int(False))
+                    hist, loss, loss_tuple = run_and_store_ANN(model=model, inSample=True, model_name=model_name+'_inSample',
+                                                nb_epochs=epochs - separate_initial_epochs, reset='continue',
                                                 columns=used_features, get_deltas=True,
+                                                include_synth=include_synthetic_data,
                                                 normalize=normalization, batch_size=batch_size,
-                                                   data_package=data_package, starting_time_str=starting_time_str)
-                if useEarlyStopping:
-                    actual_epochs = len(hist.history['loss'])+len(initial_hist.history['loss'])
-
-                (last_losses_mean, last_losses_std, last_val_losses_mean, last_val_losses_std) = loss_tuple
+                                                            data_package=data_package, starting_time_str=starting_time_str)
 
 
 
-                data, _, _, _, scaler_X, scaler_Y = data_package
-                X_train = data[0]
-                X_val = data[2]
-                SSD_train = get_SSD(model, X_train)
-                SSD_val = get_SSD(model, X_val)
-                SSD_distribution_train.append(SSD_train)
-                SSD_distribution_val.append(SSD_val)
+                    _, loss_oos, _ = run_and_store_ANN(model=model, inSample=False,
+                                                    model_name=model_name+'_outSample', reset='reuse',
+                                                    columns=used_features, get_deltas=True,
+                                                    normalize=normalization, batch_size=batch_size,
+                                                       data_package=data_package, starting_time_str=starting_time_str)
+                    if useEarlyStopping:
+                        actual_epochs = len(hist.history['loss'])+len(initial_hist.history['loss'])
+
+                    (last_losses_mean, last_losses_std, last_val_losses_mean, last_val_losses_std) = loss_tuple
 
 
 
-            model_end_time = datetime.now()
-
-            feature_string = '_'.join(used_features)
-            pos_fff = feature_string.find("_ff_ind")
-            # reducing the long string of fama & french factors down
-            if pos_fff > -1:
-                feature_string = feature_string[0:pos_fff] + "_fff"
-
-
-            cols['model_name'].append(model_name)
-            cols['time'].append(datetime.now())
-            cols['duration'].append(model_end_time - starting_time)
-            cols['N_train'].append(N_train)
-            cols['N_val'].append(N_val)
-
-            cols['stock'].append(stock)
-            cols['dt_start'].append(dt_start)
-            cols['dt_middle'].append(dt_middle)
-            cols['dt_end'].append(dt_end)
+                    data, _, _, _, scaler_X, scaler_Y = data_package
+                    X_train = data[0]
+                    X_val = data[2]
+                    SSD_train = get_SSD(model, X_train)
+                    SSD_val = get_SSD(model, X_val)
+                    SSD_distribution_train.append(SSD_train)
+                    SSD_distribution_val.append(SSD_val)
 
 
-            cols['loss'].append(loss)
-            cols['loss_oos'].append(loss_oos)
-            cols['loss_mean'].append(last_losses_mean)
-            cols['loss_std'].append(last_losses_std)
-            cols['val_loss_mean'].append(last_val_losses_mean)
-            cols['val_loss_std'].append(last_val_losses_std)
 
-            cols['epochs'].append(actual_epochs)
-            cols['optimizer'].append(optimizer)
-            cols['lr'].append(lr)
-            cols['features'].append(feature_string)
-            cols['activation'].append(act)
-            cols['layers'].append(l)
-            cols['nodes'].append(n)
-            cols['batch_normalization'].append(batch_normalization)
-            cols['loss_func'].append(loss_func)
+                model_end_time = datetime.now()
 
-            cols['used_synth'].append(int(include_synthetic_data))
-            cols['normalize'].append(normalization)
-            cols['dropout'].append(dropout_rate)
-            cols['batch_size'].append(batch_size)
-            cols['regularizer'].append(regularizer)
-            cols['useEarlyStopping'].append(int(useEarlyStopping))
-
-            print((model_end_time - starting_time).seconds, end=' - ')
-            print(loss)
+                feature_string = '_'.join(used_features)
+                pos_fff = feature_string.find("_ff_ind")
+                # reducing the long string of fama & french factors down
+                if pos_fff > -1:
+                    feature_string = feature_string[0:pos_fff] + "_fff"
 
 
-            #filename = '{}_{:%Y-%m-%d_%H-%M}.h5'.format(model_name, datetime.now())
-            filename = model_name + '_' + starting_time_str + '.h5'
+                cols['model_name'].append(model_name)
+                cols['time'].append(datetime.now())
+                cols['duration'].append(model_end_time - starting_time)
+                cols['N_train'].append(N_train)
+                cols['N_val'].append(N_val)
+
+                cols['stock'].append(stock)
+                cols['dt_start'].append(dt_start)
+                cols['dt_middle'].append(dt_middle)
+                cols['dt_end'].append(dt_end)
 
 
-            model.save(os.path.join(paths['all_models'], filename))
+                cols['loss'].append(loss)
+                cols['loss_oos'].append(loss_oos)
+                cols['loss_mean'].append(last_losses_mean)
+                cols['loss_std'].append(last_losses_std)
+                cols['val_loss_mean'].append(last_val_losses_mean)
+                cols['val_loss_std'].append(last_val_losses_std)
+
+                cols['epochs'].append(actual_epochs)
+                cols['optimizer'].append(optimizer)
+                cols['lr'].append(lr)
+                cols['features'].append(feature_string)
+                cols['activation'].append(act)
+                cols['layers'].append(l)
+                cols['nodes'].append(n)
+                cols['batch_normalization'].append(batch_normalization)
+                cols['loss_func'].append(loss_func)
+
+                cols['used_synth'].append(int(include_synthetic_data))
+                cols['normalize'].append(normalization)
+                cols['dropout'].append(dropout_rate)
+                cols['batch_size'].append(batch_size)
+                cols['regularizer'].append(regularizer)
+                cols['useEarlyStopping'].append(int(useEarlyStopping))
+
+                print((model_end_time - starting_time).seconds, end=' - ')
+                print(loss)
 
 
-            # if rerun_id == 0:
-            #     scatterplot_PAD(model, [X_train, X_val], i)
-            if collect_gradients_data:
-                gradient_df_columns = ['model_name', 'time', 'sample', 'feature', 'feature_value', 'gradient']
-                #scaler_X, scaler_Y
-                grad_data = {key: [] for key in gradient_df_columns}
-
-                # X_train_rescaled = scaler_X.inverse_transform(X_train)
-                # X_val_rescaled = scaler_X.inverse_transform(X_val)
-                # X_train = pd.DataFrame(X_train_rescaled, index=X_train.index, columns=X_train.columns)
-                # X_val = pd.DataFrame(X_val_rescaled, index=X_val.index, columns=X_val.columns)
-
-                #sampling_dict = dict(train=X_train, test=X_val)
-                sampling_dict = dict(train=X_train, test=X_val)
-
-                for sample_key, points in sampling_dict.items():
-
-                    gradients = get_gradients(model, points)
-                    rescaled = scaler_X.inverse_transform(points)
-                    points = pd.DataFrame(rescaled, index=points.index, columns=points.columns)
-
-                    for feature_iloc, feature_name in enumerate(points.columns):
-                        for value, gradient in zip(points.iloc[:, feature_iloc], gradients[:, feature_iloc]):
-                            grad_data['model_name'].append(model_name)
-                            grad_data['time'].append(starting_time)
-                            grad_data['sample'].append(sample_key)
-                            grad_data['feature'].append(feature_name)
-                            grad_data['feature_value'].append(value)
-                            grad_data['gradient'].append(gradient)
+                #filename = '{}_{:%Y-%m-%d_%H-%M}.h5'.format(model_name, datetime.now())
+                filename = model_name + '_' + starting_time_str + '.h5'
 
 
-                        # for i, var in enumerate(points.columns):
-                        #     x = np.array(points.iloc[:, i])
-                        #     y = gradients[:, i]
+                model.save(os.path.join(paths['all_models'], filename))
 
-                gradients_df = pd.DataFrame(grad_data)
 
-                if limit_windows != 'mock-testing':
-                    with pd.HDFStore(paths['gradients_data']) as store:
-                        try:
-                            previous_gradients_df = store['gradients_data']
-                            merged_gradients_df = pd.concat([gradients_df, previous_gradients_df])
-                        except:
-                            merged_gradients_df = gradients_df
-                        store['gradients_data'] = merged_gradients_df
+                # if rerun_id == 0:
+                #     scatterplot_PAD(model, [X_train, X_val], i)
+                if collect_gradients_data:
+                    gradient_df_columns = ['model_name', 'time', 'sample', 'feature', 'feature_value', 'gradient']
+                    #scaler_X, scaler_Y
+                    grad_data = {key: [] for key in gradient_df_columns}
 
-            if interrupt_flag:
-                break
+                    # X_train_rescaled = scaler_X.inverse_transform(X_train)
+                    # X_val_rescaled = scaler_X.inverse_transform(X_val)
+                    # X_train = pd.DataFrame(X_train_rescaled, index=X_train.index, columns=X_train.columns)
+                    # X_val = pd.DataFrame(X_val_rescaled, index=X_val.index, columns=X_val.columns)
 
-            K.clear_session()
-            tf.reset_default_graph()
+                    #sampling_dict = dict(train=X_train, test=X_val)
+                    sampling_dict = dict(train=X_train, test=X_val)
 
-        if j >= 5:
-            if not onCluster and len(used_features) > 3:
-                boxplot_SSD_distribution(SSD_distribution_train, used_features, 'Training Data', model_name)
-                boxplot_SSD_distribution(SSD_distribution_val, used_features, 'Validation Data', model_name)
+                    for sample_key, points in sampling_dict.items():
 
-            if saveResultsForLatex:
-                SSDD_df = pd.DataFrame(SSD_distribution_val, columns=used_features)
+                        gradients = get_gradients(model, points)
+                        rescaled = scaler_X.inverse_transform(points)
+                        points = pd.DataFrame(rescaled, index=points.index, columns=points.columns)
 
-                key = 'SSDD_df' if i == 1 else 'SSDD_df_{}'.format(i)
+                        for feature_iloc, feature_name in enumerate(points.columns):
+                            for value, gradient in zip(points.iloc[:, feature_iloc], gradients[:, feature_iloc]):
+                                grad_data['model_name'].append(model_name)
+                                grad_data['time'].append(starting_time)
+                                grad_data['sample'].append(sample_key)
+                                grad_data['feature'].append(feature_name)
+                                grad_data['feature_value'].append(value)
+                                grad_data['gradient'].append(gradient)
 
-                with pd.HDFStore(paths['data_for_latex']) as store:
-                    store[key] = SSDD_df
 
-    results_df = pd.DataFrame(cols)
+                            # for i, var in enumerate(points.columns):
+                            #     x = np.array(points.iloc[:, i])
+                            #     y = gradients[:, i]
 
-    if limit_windows != 'mock-testing':
-        try:
-            with pd.ExcelFile(paths['results-excel']) as reader:
-                previous_results = reader.parse("RunData")
-            runID = previous_results['runID'].max()+1
-            results_df['runID'] = runID
-            merged_results = pd.concat([results_df, previous_results])
-        except:
-            results_df['runID'] = 1
-            merged_results = results_df
+                    gradients_df = pd.DataFrame(grad_data)
 
-        with pd.ExcelWriter(paths['results-excel']) as writer:
-            merged_results.to_excel(writer, 'RunData')
-            writer.save()
+                    if limit_windows != 'mock-testing':
+                        with pd.HDFStore(paths['gradients_data']) as store:
+                            try:
+                                previous_gradients_df = store['gradients_data']
+                                merged_gradients_df = pd.concat([gradients_df, previous_gradients_df])
+                            except:
+                                merged_gradients_df = gradients_df
+                            store['gradients_data'] = merged_gradients_df
 
+                if interrupt_flag:
+                    break
+
+                K.clear_session()
+                tf.reset_default_graph()
+
+            if j >= 5:
+                if not onCluster and len(used_features) > 3:
+                    boxplot_SSD_distribution(SSD_distribution_train, used_features, 'Training Data', model_name)
+                    boxplot_SSD_distribution(SSD_distribution_val, used_features, 'Validation Data', model_name)
+
+                if saveResultsForLatex:
+                    SSDD_df = pd.DataFrame(SSD_distribution_val, columns=used_features)
+
+                    key = 'SSDD_df' if i == 1 else 'SSDD_df_{}'.format(i)
+
+                    with pd.HDFStore(paths['data_for_latex']) as store:
+                        store[key] = SSDD_df
+
+        results_df = pd.DataFrame(cols)
+
+        if limit_windows != 'mock-testing':
+            try:
+                with pd.ExcelFile(paths['results-excel']) as reader:
+                    previous_results = reader.parse("RunData")
+                runID = previous_results['runID'].max()+1
+                results_df['runID'] = runID
+                merged_results = pd.concat([results_df, previous_results])
+            except:
+                results_df['runID'] = 1
+                merged_results = results_df
+
+            with pd.ExcelWriter(paths['results-excel']) as writer:
+                merged_results.to_excel(writer, 'RunData')
+                writer.save()
+
+        print('ANN calculations done')
+        if not onCluster:
+            if not cols['failed'][-1]:
+                get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='prediction')
+                get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='error')
+                get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='calculated_delta')
+                get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='scaled_option_price')
     # cols = {col: [] for col in watches}
 
-    if run_BS_as_well:
+    if run_BS in ['yes', 'only_BS']: # not 'no'
         print('Running Black Scholes Benchmark')
 
         BS_watches = ['stock', 'dt_start', 'dt_middle', 'dt_end', 'vol_proxy', 'MSE', 'MAE', 'MAPE']
         BS_cols = {col: [] for col in BS_watches}
 
-        j = 0
-        for window in itertools.product(*windows_list):
-            j += 1
-            stock, date_tuple, rerun_id = window
-            dt_start, dt_middle, dt_end = date_tuple
-            data_package = get_data_package(
-                model='BS',
-                columns=['days', 'moneyness', 'impl_volatility', 'v60', 'r'],
-                stock=stock,
-                start_date=dt_start,
-                end_train_start_val_date=dt_middle,
-                end_val_date=dt_end
-            )
-            MSE, MAE, MAPE = run_black_scholes(data_package, vol_proxy=vol_proxy)
+        i = 0
+        for vol_proxy in vol_proxies:
+            i += 1
+            j = 0
+            for window in itertools.product(*windows_list):
+                j += 1
 
-            BS_cols['stock'].append(stock)
-            BS_cols['dt_start'].append(dt_start)
-            BS_cols['dt_middle'].append(dt_middle)
-            BS_cols['dt_end'].append(dt_end)
-            BS_cols['vol_proxy'].append(vol_proxy)
-            BS_cols['MSE'].append(MSE)
-            BS_cols['MAE'].append(MAE)
-            BS_cols['MAPE'].append(MAPE)
+                print('{}.{}'.format(i, j), end=' ', flush=True)
+                stock, date_tuple, rerun_id = window
+                dt_start, dt_middle, dt_end = date_tuple
+                data_package = get_data_package(
+                    model='BS',
+                    columns=['days', 'moneyness', 'impl_volatility', 'v60', 'r'],
+                    stock=stock,
+                    start_date=dt_start,
+                    end_train_start_val_date=dt_middle,
+                    end_val_date=dt_end
+                )
+                MSE, MAE, MAPE = run_black_scholes(data_package, vol_proxy=vol_proxy)
+                print(MSE)
+
+                BS_cols['stock'].append(stock)
+                BS_cols['dt_start'].append(dt_start)
+                BS_cols['dt_middle'].append(dt_middle)
+                BS_cols['dt_end'].append(dt_end)
+                BS_cols['vol_proxy'].append(vol_proxy)
+                BS_cols['MSE'].append(MSE)
+                BS_cols['MAE'].append(MAE)
+                BS_cols['MAPE'].append(MAPE)
 
         BS_results_df = pd.DataFrame(BS_cols)
 
         if limit_windows != 'mock-testing':
-            BS_results_df['runID'] = runID
             try:
                 with pd.ExcelFile(paths['results-excel-BS']) as reader:
                     BS_previous_results = reader.parse("RunData")
+                if run_BS == 'only_BS':
+                    BS_results_df['runID'] = BS_previous_results.runID.max()+1
+                else:
+                    BS_results_df['runID'] = runID
                 #runID = BS_previous_results['runID'].max()+1
                 BS_merged_results = pd.concat([BS_results_df, BS_previous_results])
             except:
+                BS_results_df['runID'] = 1
                 BS_merged_results = BS_results_df
 
             with pd.ExcelWriter(paths['results-excel-BS']) as writer:
                 BS_merged_results.to_excel(writer, 'RunData')
                 writer.save()
+        print('BS done')
 
 
-    print('Done')
-    if not onCluster:
-        if not cols['failed'][-1]:
-            get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='prediction')
-            get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='error')
-            get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='calculated_delta')
-            get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='scaled_option_price')
 
     print('Close')
 

@@ -147,7 +147,7 @@ active_feature_combinations = list(range(len(full_feature_combination_list)))
 # ----------------------------------
 # Hyperparameters
 # ----------------------------------
-epochs = 800
+epochs = 250
 loss_func = 'mse'
 # if required_precision is not reached during initial training, the run is declared "failed", saving time
 if loss_func == 'mape':
@@ -163,12 +163,12 @@ separate_initial_epochs = int(epochs / 10)
 lr = None  # 0.0001
 batch_normalization = False
 multi_target = False
-useEarlyStopping = True
+useEarlyStopping = False
 
 identical_reruns = 1
 
 activations = ['relu']  # 'tanh'
-number_of_nodes = [50] # [250]
+number_of_nodes = [250] # [250]
 number_of_layers = [3] # [3]
 optimizers = ['adam']
 include_synthetic_datas = [True, False]
@@ -204,5 +204,6 @@ for setting_options in settings_list:
 # ----------------------------------
 # Benchmark
 # ----------------------------------
-run_BS_as_well = False
-vol_proxy = 'hist_realized'
+run_BS = 'yes'  # 'yes', 'no', only_BS'
+vol_proxies = ['surface', 'hist_realized']  # , hist_implied
+cd_of_quotes_to_consider_for_vol_surf = 7
