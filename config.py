@@ -175,7 +175,7 @@ include_synthetic_datas = [True, False]
 dropout_rates = [0.1]
 batch_sizes = [500]  # 100,
 normalizations = ['mmscaler']  # 'no', 'rscaler', 'sscaler',
-regularizers = ['none'] # l1, l2, none
+regularizers = [None] # 'l1', 'l2', None
 
 if limit_windows == 'mock-testing':
     epochs = 10
