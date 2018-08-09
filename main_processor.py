@@ -1,25 +1,3 @@
-'''
-@Todo
-    repair delta calculation
-        it is currently based on 1 unit of change in moneyness (rather than stockprice)
-
-    Justify Hyperparameter selection
-        maybe try random hyper-parameter optimization?
-            http://scikit-learn.org/stable/modules/grid_search.html#randomized-parameter-optimization
-
-
-@ToTest (already implemented)
-    Get rid of weird sudden spikes
-        change activation function to something bounded? --> tanh
-        increase batch size
-
-    Test new variables:
-        influence of earnings:
-            pe_op_basic
-            pe_op_dil
-
-'''
-
 import pandas as pd
 import numpy as np
 import json
