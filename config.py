@@ -4,14 +4,17 @@ from numpy.random import seed as seed_np
 from tensorflow import set_random_seed as seed_tf
 from time import time
 from datetime import datetime
+import logging
+import warnings
+import pandas
 
 
 # ----------------------------------
 # Other
 # ----------------------------------
-import logging
 logging.getLogger("tensorflow").setLevel(logging.WARNING)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+warnings.filterwarnings('ignore',category=pandas.io.pytables.PerformanceWarning)
 
 # ----------------------------------
 # Reproducibility
@@ -24,7 +27,7 @@ seed_tf(random_seed)
 # Output for Latex
 # ----------------------------------
 saveResultsForLatex = True
-collect_gradients_data = False
+collect_gradients_data = True
 
 # ----------------------------------
 # Data Preparation
@@ -32,7 +35,7 @@ collect_gradients_data = False
 start_year = 2010
 end_year = 2016
 annualization = 252
-stock_count_to_pick = 5
+stock_count_to_pick = 6
 do_redownload_all_data = False
 
 overlapping_windows = True
@@ -94,8 +97,9 @@ paths['vix'] = os.path.join(rootpath,'vix.h5')
 paths['dividends'] = os.path.join(rootpath,'dividends.h5')
 paths['ratios'] = os.path.join(rootpath,'ratios.h5')
 paths['names'] = os.path.join(rootpath,'names.h5')
+paths['sp500_permnos'] = os.path.join(rootpath, 'SP500_permnos.csv')
 paths['options'] = []
-for y in range(1996, 2017):
+for y in range(start_year, end_year): #range(1996, 2017)
     paths['options'].append(os.path.join(rootpath, "OptionsData", "rawopt_" + str(y) + "AllIndices.csv"))
 
 if not os.path.exists(paths['all_models']):
@@ -138,10 +142,10 @@ for i in range(len(optional_features) + 1):
 # active_feature_combinations = [0, len(full_feature_combination_list)-1]         # every and nothing
 # active_feature_combinations = [len(full_feature_combination_list) - 1]  # "full" model only
 
-# All and nothing and any individual
-full_feature_combination_list = [mandatory_features]
-full_feature_combination_list += [mandatory_features+[feature] for feature in optional_features]
-full_feature_combination_list += [mandatory_features + optional_features]
+full_feature_combination_list = [mandatory_features] # Nothing
+full_feature_combination_list += [mandatory_features+[feature] for feature in optional_features] # Singles
+full_feature_combination_list += [mandatory_features + ['r', 'vix']] # BS-like
+full_feature_combination_list += [mandatory_features + optional_features] # All
 active_feature_combinations = list(range(len(full_feature_combination_list)))
 
 # ----------------------------------
