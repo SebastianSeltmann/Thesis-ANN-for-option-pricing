@@ -137,10 +137,10 @@ def perform_experiment():
                 loss_oos = last_losses_mean = last_losses_std = last_val_losses_mean =\
                     last_val_losses_std = None
 
-                pattern = 'c{}_act_{}_lf{}_l{}_n{}_o_{}_bn{}_do{}_s{}_no{}_bs{}'
+                pattern = 'c{}_act{}_lf{}_l{}_n{}_o{}_bn{}_do{}_s{}_no{}_bs{}_r{}'
                 model_name = pattern.format(c, act, loss_func, l, n, optimizer, int(batch_normalization),
                                             int(dropout_rate*10), int(include_synthetic_data),
-                                            normalization, batch_size)
+                                            normalization, batch_size, regularizer)
 
 
                 if multi_target:
@@ -292,10 +292,10 @@ def perform_experiment():
 
                 # if rerun_id == 0:
                 #     scatterplot_PAD(model, [X_train, X_val], i)
-                is_All_or_None_Run = len(used_features) in ([2, len(full_feature_combination_list[-1])])
+                is_All_or_None_Run = len(used_features) in ([2, 4, len(full_feature_combination_list[-1])])
                 if collect_gradients_data and is_All_or_None_Run:
                     gradient_df_columns = ['model_name', 'time', 'sample', 'feature', 'feature_value', 'gradient',
-                                           'stock', 'dt_start', 'runID']
+                                           'stock', 'dt_start', 'runID', 'num_features']
                     #scaler_X, scaler_Y
                     grad_data = {key: [] for key in gradient_df_columns}
 
@@ -318,6 +318,7 @@ def perform_experiment():
                                 grad_data['stock'].append(stock)
                                 grad_data['dt_start'].append(dt_start)
                                 grad_data['runID'].append(runID)
+                                grad_data['num_features'].append(len(points.columns))
 
                     gradients_df = pd.DataFrame(grad_data)
 
@@ -342,12 +343,13 @@ def perform_experiment():
                     boxplot_SSD_distribution(SSD_distribution_val, used_features, 'Validation Data', model_name)
 
                 if saveResultsForLatex:
-                    SSDD_df_train = pd.DataFrame(SSD_distribution_val, columns=used_features)
+                    SSDD_df_train = pd.DataFrame(SSD_distribution_train, columns=used_features)
                     SSDD_df_val = pd.DataFrame(SSD_distribution_val, columns=used_features)
                     SSDD_df_train['sample'] = 'train'
                     SSDD_df_val['sample'] = 'test'
                     merged_results = pd.concat([SSDD_df_train, SSDD_df_val])
                     merged_results['runID'] = runID
+                    merged_results['used_synth'] = include_synthetic_data
 
                     try:
                         with pd.HDFStore(paths['data_for_latex']) as store:
