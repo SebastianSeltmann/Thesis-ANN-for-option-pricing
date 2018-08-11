@@ -65,10 +65,11 @@ def show_largest_globals():
         print('{}: {}'.format(name, size))
 
 
-def fetch_and_store_sp500():
+def fetch_and_store_sp500(db):
     ## ---------------------- WRDS CONNECTION  ------------------------
 
-    db = wrds.Connection()
+    if db is None:
+        db = wrds.Connection()
 
     ## ----------------- SOURCING S&P 500 CONSTITUENTS --------------------
 
@@ -91,8 +92,13 @@ def fetch_and_store_sp500():
 
     ## ------------------- SOURCING PRICE DATA -----------------------------
     print('Loading Price Data')
-    prices = db.raw_sql("Select date, permno, cusip, PRC, shrout from crspa.dsf where permno in (" + ", ".join(
-        str(x) for x in permnos) + ")" + " and date between '1990-01-01' and '2017-11-22'")
+    permnolist = ", ".join(str(x) for x in permnos)
+    prices = db.raw_sql(
+        "Select date, permno, cusip, PRC, shrout "
+        "from crspa.dsf "
+        "where permno in ({}) "
+        "and date between '{}-01-01' and '{}-01-01'".format(permnolist, start_year, end_year)
+    )
     prices_sp50 = prices
 
     permnos_m = prices_sp50['permno'].unique()
@@ -100,7 +106,7 @@ def fetch_and_store_sp500():
     # Process the price data
 
     for i in permnos_m:
-        if i == 10057:
+        if i == permnos_m[0]:
             x = prices_sp50[prices_sp50['permno'] == i][['date', 'prc']].set_index('date', drop=True)
             x.columns = [i]
             prc_merge = x
@@ -112,27 +118,25 @@ def fetch_and_store_sp500():
     print('Price Data Loaded')
     ## ----------------------------- EXPORT --------------------------------
 
-    writer1 = pd.ExcelWriter(paths['xlsx constituents & prices'])
-    const.to_excel(writer1, 'Compustat_const')
-    crsp_id.to_excel(writer1, 'CRSP_const')
-    prc_merge.to_excel(writer1, 'Prices')
-    writer1.save()
+    # with pd.ExcelWriter(paths['xlsx constituents & prices']) as writer1:
+    #     const.to_excel(writer1, 'Compustat_const')
+    #     crsp_id.to_excel(writer1, 'CRSP_const')
+    #     prc_merge.to_excel(writer1, 'Prices')
+    #     writer1.save()
+    #
+    # prices.to_csv(paths['raw prices'], sep='\t', encoding='utf-8')
 
-    prices.to_csv(paths['raw prices'], sep='\t', encoding='utf-8')
-
-    store = pd.HDFStore(paths['prices_raw'])
-    store['Compustat_const'] = const
-    store['CRSP_const'] = crsp_id
-    store['Prices_raw'] = prices
-    store['Prices'] = prc_merge
-    store.close()
+    with pd.HDFStore(paths['prices_raw']) as store:
+        store['Compustat_const'] = const
+        store['CRSP_const'] = crsp_id
+        store['Prices_raw'] = prices
+        store['Prices'] = prc_merge
     return prc_merge, crsp_id
 
 
 def store_options(option_type='call'):
-    store = pd.HDFStore(paths['h5 constituents & prices'])
-    CRSP_const = store['CRSP_const']
-    store.close()
+    with pd.HDFStore(paths['prices_raw']) as store:
+        CRSP_const = store['CRSP_const']
 
     ## Create constituents data frame
     open(paths['all_options_h5'], 'w').close()  # delete previous HDF
@@ -142,37 +146,36 @@ def store_options(option_type='call'):
     en_y = pd.to_datetime(CRSP_const['ending'])
 
     for file in paths['options']:
+        print(file)
         with open(file, 'r') as o:
-            print(file)
             data = pd.read_csv(o)
 
-            year_index = file.find('rawopt_')
-            cur_y = file[year_index + 7:year_index + 7 + 4]
-            idx1 = st_y <= cur_y
-            idx2 = en_y >= cur_y
-            idx3 = data.best_bid > 0
-            idx = idx1 & idx2 & idx3
-            const = CRSP_const.loc[idx, :].reset_index(drop=True)
-            listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'best_offer', 'impl_volatility', 'delta', 'strike_price']],
-                             const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
+        year_index = file.find('rawopt_')
+        cur_y = file[year_index + 7:year_index + 7 + 4]
+        idx1 = st_y <= cur_y
+        idx2 = en_y >= cur_y
+        idx3 = data.best_bid > 0
+        idx = idx1 & idx2 & idx3
+        const = CRSP_const.loc[idx, :].reset_index(drop=True)
+        listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'best_offer', 'impl_volatility', 'delta', 'strike_price']],
+                         const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
 
-            option_price = (listO.best_bid + listO.best_offer) / 2
-            listO = pd.concat([listO, option_price], axis=1).rename(columns={0: 'option_price'})
-            listO.drop(['best_bid', 'best_offer'], axis=1, inplace=True)
+        option_price = (listO.best_bid + listO.best_offer) / 2
+        listO = pd.concat([listO, option_price], axis=1).rename(columns={0: 'option_price'})
+        listO.drop(['best_bid', 'best_offer'], axis=1, inplace=True)
 
-            listO['date'] = pd.to_datetime(listO['date'], format='%d%b%Y')
-            if option_type == 'call':
-                idx3 = listO['delta'] > 0
-            elif option_type == 'put':
-                idx3 = listO['delta'] < 0
-            else:
-                raise ValueError("option_type must be either 'call' or 'put'")
-            listO = listO.loc[idx3, :]
-            listO['strike_price'] = listO['strike_price'] / 1000
-            print(listO.shape)
-            store = pd.HDFStore(paths['all_options_h5'])
+        listO['date'] = pd.to_datetime(listO['date'], format='%d%b%Y')
+        if option_type == 'call':
+            idx3 = listO['delta'] > 0
+        elif option_type == 'put':
+            idx3 = listO['delta'] < 0
+        else:
+            raise ValueError("option_type must be either 'call' or 'put'")
+        listO = listO.loc[idx3, :]
+        listO['strike_price'] = listO['strike_price'] / 1000
+        print(listO.shape)
+        with pd.HDFStore(paths['all_options_h5']) as store:
             store.append('options' + cur_y, listO, index=False, data_columns=True)
-            store.close()
 
 
 def determine_available_wrds_data(db=None):
@@ -307,6 +310,10 @@ def download_names_data(db=None):
 def redownload_all_data():
     db = wrds.Connection()
 
+    fetch_and_store_sp500(db)
+
+    store_options()
+
     download_vix_data(db)
     download_treasury_data()
     download_dividends_data(db)
@@ -318,7 +325,7 @@ def redownload_all_data():
 def recompute_optionsdata():
     store_options(option_type='call')
 
-
+redownload_all_data()
 print('Loading Stock Prices', end='', flush=True)
 with pd.HDFStore(paths['prices_raw']) as store:
     prices_raw = store['Prices_raw']
