@@ -110,7 +110,8 @@ def perform_experiment():
         watches = ['model_name', 'time', 'optimizer', 'lr', 'epochs', 'features', 'activation', 'layers', 'nodes',
                    'batch_normalization', 'loss', 'loss_oos', 'used_synth', 'normalize', 'dropout', 'batch_size',
                    'failed', 'loss_mean', 'loss_std', 'val_loss_mean', 'val_loss_std', 'stock', 'dt_start', 'dt_middle',
-                   'dt_end', 'duration', 'N_train', 'N_val', 'regularizer', 'useEarlyStopping', 'loss_func']
+                   'dt_end', 'duration', 'N_train', 'N_val', 'regularizer', 'useEarlyStopping', 'loss_func', 'MSHE',
+                   'MSHE_oos']
 
         cols = {col: [] for col in watches}
 
@@ -187,7 +188,7 @@ def perform_experiment():
                 starting_time = datetime.now()
                 starting_time_str = '{:%Y-%m-%d_%H-%M}'.format(starting_time)
 
-                initial_hist, initial_loss, _ = run_and_store_ANN(model=model, inSample=True, model_name='i_'+model_name+'_inSample',
+                initial_hist, initial_loss, _, _ = run_and_store_ANN(model=model, inSample=True, model_name='i_'+model_name+'_inSample',
                                   nb_epochs=separate_initial_epochs, reset='yes', columns=used_features,
                                   include_synth=include_synthetic_data, normalize=normalization, batch_size=batch_size,
                                                        data_package=data_package, starting_time_str=starting_time_str)
@@ -203,7 +204,7 @@ def perform_experiment():
 
                 else:
                     cols['failed'].append(int(False))
-                    hist, loss, loss_tuple = run_and_store_ANN(model=model, inSample=True, model_name=model_name+'_inSample',
+                    hist, loss, loss_tuple, MSHE = run_and_store_ANN(model=model, inSample=True, model_name=model_name+'_inSample',
                                                 nb_epochs=epochs - separate_initial_epochs, reset='continue',
                                                 columns=used_features, get_deltas=True,
                                                 include_synth=include_synthetic_data,
@@ -212,7 +213,7 @@ def perform_experiment():
 
 
 
-                    _, loss_oos, _ = run_and_store_ANN(model=model, inSample=False,
+                    _, loss_oos, _, MSHE_oos = run_and_store_ANN(model=model, inSample=False,
                                                     model_name=model_name+'_outSample', reset='reuse',
                                                     columns=used_features, get_deltas=True,
                                                     normalize=normalization, batch_size=batch_size,
@@ -261,6 +262,8 @@ def perform_experiment():
                 cols['loss_std'].append(last_losses_std)
                 cols['val_loss_mean'].append(last_val_losses_mean)
                 cols['val_loss_std'].append(last_val_losses_std)
+                cols['MSHE'].append(MSHE)
+                cols['MSHE_oos'].append(MSHE_oos)
 
                 cols['epochs'].append(actual_epochs)
                 cols['optimizer'].append(optimizer)
@@ -330,6 +333,7 @@ def perform_experiment():
                             except:
                                 merged_gradients_df = gradients_df
                             store['gradients_data'] = merged_gradients_df
+
 
                 if interrupt_flag:
                     break

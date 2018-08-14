@@ -1,3 +1,4 @@
+import sys
 import pandas as pd
 import numpy as np
 import datetime
@@ -17,7 +18,8 @@ from config import (
     stock_count_to_pick,
     annualization,
     onCluster,
-    optional_features
+    optional_features,
+    option_type
 )
 
 if not onCluster:
@@ -51,11 +53,15 @@ if not onCluster:
     ]
  '''
 
-
-def show_largest_globals():
+def show_largest_objects(locality='global'):
     import operator
     import sys
-    copy = globals().copy()
+    if locality == 'global':
+        copy = globals().copy()
+    elif locality == 'local':
+        copy = locals().copy()
+    else:
+        raise ValueError
     size_dict = {}
     for key, obj in copy.items():
         size_dict[key] = sys.getsizeof(copy[key])
@@ -159,6 +165,7 @@ def store_options(option_type='call'):
         const = CRSP_const.loc[idx, :].reset_index(drop=True)
         listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'best_offer', 'impl_volatility', 'delta', 'strike_price']],
                          const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
+        listO = data[['id', 'date', 'days', 'best_bid', 'best_offer', 'impl_volatility', 'delta', 'strike_price']]
 
         option_price = (listO.best_bid + listO.best_offer) / 2
         listO = pd.concat([listO, option_price], axis=1).rename(columns={0: 'option_price'})
@@ -306,13 +313,15 @@ def download_names_data(db=None):
     store['names'] = names
     store.close()
 
+def recompute_optionsdata(option_type='call'):
+    store_options(option_type='call')
 
 def redownload_all_data():
     db = wrds.Connection()
 
     fetch_and_store_sp500(db)
 
-    store_options()
+    recompute_optionsdata(option_type=option_type)
 
     download_vix_data(db)
     download_treasury_data()
@@ -320,12 +329,6 @@ def redownload_all_data():
     download_fundamentals_data(db)
     download_names_data(db)
 
-
-
-def recompute_optionsdata():
-    store_options(option_type='call')
-
-redownload_all_data()
 print('Loading Stock Prices', end='', flush=True)
 with pd.HDFStore(paths['prices_raw']) as store:
     prices_raw = store['Prices_raw']
@@ -398,6 +401,21 @@ prices_raw['prc_shifted_1'] = prices_raw.groupby(level=1)['prc'].shift(-1)
 merged = pd.merge(df[['days', 'option_price', 'impl_volatility', 'delta', 'strike_price', 'hist_impl_volatility']],
          prices_raw[['prc', 'prc_shifted_1']], how='inner', left_index=True, right_index=True)
 
+print('Computing Expiration Date & shifting option_price')
+merged.reset_index(inplace=True)
+merged['timedelta'] = merged.loc[:, 'days'].apply(datetime.timedelta)
+merged['expiration_date'] = pd.to_datetime(merged['date']) + merged.loc[:, 'timedelta']
+merged.drop(columns=['timedelta'], inplace=True)
+merged.set_index(['date', 'permno'], inplace=True)
+
+merged = pd.merge(
+    merged.reset_index(),
+    prices_raw.reset_index(),
+    left_on=['expiration_date', 'permno'],
+    right_on=['date', 'permno'],
+    how='left',
+    suffixes=('', '_atExpiration')
+).loc[:, list(merged.columns) + list(merged.index.names) + ['prc_atExpiration']].set_index(['date', 'permno'])
 
 print('Merging with returns data')
 merged['returns'] = ser_returns
@@ -495,22 +513,21 @@ merged = pd.merge(merged, ratios_to_merge, left_on=['permno','month_end_date'], 
                   how='inner')
 merged.drop(columns=['month_end_date', 'public_date'], inplace=True)
 
+del(ratios_to_merge)
+show_largest_objects(locality='local')
+
 print('Merging with names data')
 idx = names.groupby(['permno'])['nameenddt'].transform(max) == names['nameenddt']
 last_names = names.loc[idx, ['permno', 'comnam', 'ticker']]
 merged = pd.merge(merged, last_names, left_on=['permno'], right_on=['permno'], how='inner')
 
 
-print('Computing Expiration Date & shifting option_price')
-merged.reset_index(inplace=True)
-merged['timedelta'] = merged.loc[:, 'days'].apply(datetime.timedelta)
-merged['expiration_date'] = pd.to_datetime(merged['date']) + merged.loc[:, 'timedelta']
-merged.drop(columns=['timedelta'], inplace=True)
 
+'''
+merged.reset_index(inplace=True)
 merged.set_index(['date', 'permno', 'strike_price', 'expiration_date'], inplace=True)
 merged['option_price_shifted_1'] = merged.groupby(level=[1, 2, 3])['option_price'].shift(-1)
-merged.reset_index(inplace=True)
-merged.set_index(['date', 'permno'], inplace=True)
+'''
 
 print('Dropping NaN values: {:.2f}%'.format(merged.isna().any(axis=1).mean()*100))
 merged.dropna(how='any', inplace=True)
@@ -518,10 +535,9 @@ merged.dropna(how='any', inplace=True)
 print('Computing moneyness')
 merged['moneyness'] = merged.prc / merged.strike_price
 merged['scaled_option_price'] = merged.option_price / merged.strike_price
-merged['scaled_option_price_shifted_1'] = merged.option_price_shifted_1 / merged.strike_price
+#merged['scaled_option_price_shifted_1'] = merged.option_price_shifted_1 / merged.strike_price
 
 
-del(ratios_to_merge)
 del(names)
 
 '''
@@ -546,6 +562,7 @@ print('removing very far out or in the money options')
 merged = merged.loc[merged.moneyness < 4 & merged.moneyness > ]
 print('merged.shape: {}'.format(merged.shape))
 '''
+print('merged.shape: {}'.format(merged.shape))
 
 print('Selecting stocks with most consistent data availability')
 #names = train.reset_index().loc[:, ['permno', 'comnam', 'ticker']].drop_duplicates()
@@ -752,7 +769,7 @@ def generate_synthetic_data(option_type='call'):
 
     print('Generating synthetic contracts at boundary condition S >> K')
     K = 100
-    for S in range(int(K * 2.5), int(K * 4), 50):
+    for S in range(int(K * 3.5), int(K * 6), 50):
         for days in range(2, 60):
             days = days / 365
 
@@ -816,35 +833,4 @@ with pd.HDFStore(paths['options_for_ann']) as store:
 
 print('Done')
 
-def determine_perfect_hedges_with_hindsight(merged=None):
-    mini_merged = merged[0:1000]
-    mini_merged = merged.loc[(slice('2010-01-05 00:00:00'),['10078'],[11.0]),:]
-
-
-
-    mini_merged.drop(columns=['P_value_change_1', 'perfect_hedge_1'], inplace=True)
-
-    merged.reset_index(inplace=True)
-    merged.set_index(['date', 'permno', 'strike_price'], inplace=True)
-
-
-    filtered = mini_merged
-    cols = ['prc', 'prc_shifted_1', 'option_price', 'option_price_shifted_1', 'perfect_hedge_1', 'P_value_change_1']
-
-    print(mini_merged.loc[('2010-01-04 00:00:00', '10078', 11.0),cols].values)
-    print(mini_merged.loc[('2010-01-05 00:00:00', '10078', 11.0),cols].values)
-    print(mini_merged.loc[('2010-01-06 00:00:00', '10078', 11.0),cols].values)
-
-
-
-    print(merged.loc[('2010-01-04 00:00:00', '10078', 11.0):('2010-01-06 00:00:00', '10078', 11.0),cols])
-    print(merged.loc['2010-01-04 00:00:00', '10078', 11.0][cols])
-    print(merged.loc['2010-01-05 00:00:00', '10078', 11.0][cols])
-    print(merged.loc['2010-01-06 00:00:00', '10078', 11.0][cols])
-
-
-
-
-    merged = merged[['days', 'option_price', 's1', 'impl_volatility', 'delta', 'prc',
-       'prc_shifted_1', 'returns', 'v110', 'v60', 'v20', 'v5', 'r', 'vix',
-       'moneyness', 'scaled_option_price']]
+sys.exit()

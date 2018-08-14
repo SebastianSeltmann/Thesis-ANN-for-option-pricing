@@ -32,6 +32,7 @@ collect_gradients_data = True
 # ----------------------------------
 # Data Preparation
 # ----------------------------------
+option_type = 'call'
 start_year = 2010
 end_year = 2016
 annualization = 252
@@ -91,6 +92,7 @@ paths['all_models'] = os.path.join(rootpath, 'all_models', '{:%Y-%m-%d_%H-%M}'.f
 
 
 paths['prices_raw'] = os.path.join(rootpath, "prices.h5")
+paths['merged'] = os.path.join(rootpath, "merged.h5")
 paths['all_options_h5'] = os.path.join(rootpath,"all_options.h5")
 paths['treasury'] = os.path.join(rootpath,'3months-treasury.h5')
 paths['vix'] = os.path.join(rootpath,'vix.h5')

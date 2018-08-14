@@ -13,7 +13,14 @@ from keras.callbacks import TensorBoard, EarlyStopping
 
 from matplotlib import pyplot as plt
 
-from config import paths, required_precision, onCluster, useEarlyStopping, cd_of_quotes_to_consider_for_vol_surf
+from config import (
+    paths,
+    required_precision,
+    onCluster,
+    useEarlyStopping,
+    cd_of_quotes_to_consider_for_vol_surf,
+    option_type,
+)
 
 from data import (
     data as dataset,
@@ -96,7 +103,8 @@ def get_data_package(model, columns=['days', 'moneyness'], include_synth=False, 
             output_columns = ['scaled_option_price', 'perfect_hedge_1']
         else:
             output_columns = ['scaled_option_price']
-    ref_columns = ['prc', 'option_price', 'strike_price', 'prc_shifted_1', 'option_price_shifted_1']
+    # ref_columns = ['prc', 'option_price', 'strike_price', 'prc_shifted_1', 'option_price_shifted_1']
+    ref_columns = ['prc', 'option_price', 'strike_price', 'prc_atExpiration']
 
     data = get_data_window(
         input_columns=columns,
@@ -236,6 +244,17 @@ def run_and_store_ANN(model, inSample=False, reset='yes', nb_epochs=5, data_pack
     if get_deltas:
         deltas = extract_deltas(model, sample, ref_data.loc[:,'strike_price'])
         sample["calculated_delta"] = deltas
+        change_in_stock_value = ref_data['prc_atExpiration'] - ref_data['prc']
+        if option_type == 'call':
+            option_payout = max(0, ref_data['prc_atExpiration'] - ref_data.strike_price)
+        elif option_type == 'put':
+            option_payout = max(0, ref_data.strike_price - ref_data['prc_atExpiration'])
+        else:
+            raise ValueError
+        change_in_option_value = deltas * option_payout
+        change_in_portfolio_value = change_in_stock_value - change_in_option_value
+        sample["hedging_error"] = change_in_portfolio_value
+        MSHE = (change_in_portfolio_value**2).mean()
     if type(Y_prediction) is list:
         sample["prediction"] = Y_prediction[0]
         sample["predicted_hedge_1"] = Y_prediction[1]
@@ -282,7 +301,7 @@ def run_and_store_ANN(model, inSample=False, reset='yes', nb_epochs=5, data_pack
     # if len(loss)> 0:
     #     success = loss[-1] < required_precision
     # else: success = True
-    return history, last_loss, loss_tuple
+    return history, last_loss, loss_tuple, MSHE
 
 
 class TrainValTensorBoard(TensorBoard):
