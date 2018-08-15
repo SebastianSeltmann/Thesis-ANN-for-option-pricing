@@ -60,6 +60,8 @@ def show_largest_objects(locality='global'):
         copy = globals().copy()
     elif locality == 'local':
         copy = locals().copy()
+    elif locality == 'vars':
+        copy = vars().copy()
     else:
         raise ValueError
     size_dict = {}
@@ -374,6 +376,7 @@ returns = prices.pct_change()
 
 
 
+
 def reshape_into_series(df):
     df.index = df.index.astype('datetime64[ns]')
     df.columns = df.columns.astype(np.int64)
@@ -408,14 +411,6 @@ merged['expiration_date'] = pd.to_datetime(merged['date']) + merged.loc[:, 'time
 merged.drop(columns=['timedelta'], inplace=True)
 merged.set_index(['date', 'permno'], inplace=True)
 
-merged = pd.merge(
-    merged.reset_index(),
-    prices_raw.reset_index(),
-    left_on=['expiration_date', 'permno'],
-    right_on=['date', 'permno'],
-    how='left',
-    suffixes=('', '_atExpiration')
-).loc[:, list(merged.columns) + list(merged.index.names) + ['prc_atExpiration']].set_index(['date', 'permno'])
 
 print('Merging with returns data')
 merged['returns'] = ser_returns
@@ -514,16 +509,27 @@ merged = pd.merge(merged, ratios_to_merge, left_on=['permno','month_end_date'], 
 merged.drop(columns=['month_end_date', 'public_date'], inplace=True)
 
 del(ratios_to_merge)
-show_largest_objects(locality='local')
+del(treasury)
+del(vix)
 
 print('Merging with names data')
 idx = names.groupby(['permno'])['nameenddt'].transform(max) == names['nameenddt']
 last_names = names.loc[idx, ['permno', 'comnam', 'ticker']]
+last_names.permno = last_names.permno.astype('category')
+last_names.comnam = last_names.comnam.astype('category')
+last_names.ticker = last_names.ticker.astype('category')
+del(names)
+
+merged.permno = merged.permno.astype('category')
 merged = pd.merge(merged, last_names, left_on=['permno'], right_on=['permno'], how='inner')
 
 
 
 '''
+show_largest_objects(locality='vars')
+show_largest_objects(locality='local')
+show_largest_objects(locality='global')
+
 merged.reset_index(inplace=True)
 merged.set_index(['date', 'permno', 'strike_price', 'expiration_date'], inplace=True)
 merged['option_price_shifted_1'] = merged.groupby(level=[1, 2, 3])['option_price'].shift(-1)
@@ -537,8 +543,6 @@ merged['moneyness'] = merged.prc / merged.strike_price
 merged['scaled_option_price'] = merged.option_price / merged.strike_price
 #merged['scaled_option_price_shifted_1'] = merged.option_price_shifted_1 / merged.strike_price
 
-
-del(names)
 
 '''
 print('Computing perfect hedge (with hindsight)')
@@ -561,8 +565,19 @@ print('merged.shape: {}'.format(merged.shape))
 print('removing very far out or in the money options')
 merged = merged.loc[merged.moneyness < 4 & merged.moneyness > ]
 print('merged.shape: {}'.format(merged.shape))
+print(merged.columns)
+print(merged.index.get_level_values(0).max())
+# import sys
+# sys.exit()
+store = pd.HDFStore(paths['merged'])
+store.keys()
+store.close()
+merged.index.names
+merged.columns
 '''
+merged.set_index(['date', 'permno'], inplace=True)
 print('merged.shape: {}'.format(merged.shape))
+
 
 print('Selecting stocks with most consistent data availability')
 #names = train.reset_index().loc[:, ['permno', 'comnam', 'ticker']].drop_duplicates()
@@ -570,7 +585,6 @@ print('Selecting stocks with most consistent data availability')
 def year_and_stock(index):
     date, stock = index
     return '{}-{} {}'.format(date.year, math.ceil(date.month/6)*6, stock)
-
 
 counts_with_bad_index = merged.strike_price.groupby(year_and_stock).count()
 index_df = pd.DataFrame(counts_with_bad_index.index.str.split().tolist(), columns=['year', 'permno'])
@@ -588,6 +602,8 @@ stocks_weakest_years = named_counts_omnipresent.groupby(['permno']).min()
 most_consistent_stocks = list(stocks_weakest_years.sort_values(['count']).tail(stock_count_to_pick).index)
 idx = named_counts.permno.isin(most_consistent_stocks)
 named_counts_most_consistent = named_counts_omnipresent.loc[idx]
+named_counts_most_consistent.ticker = named_counts_most_consistent.ticker.astype('str')
+named_counts_most_consistent.comnam = named_counts_most_consistent.comnam.astype('str')
 availability_summary = named_counts_most_consistent.groupby('permno').min()[['count', 'ticker', 'comnam']]
 print(availability_summary)
 
@@ -639,8 +655,76 @@ for window in itertools.product(*ranges):
     sampled_df = df.sample(downsampling_n, random_state=np.random.RandomState())
     downsampled_df = downsampled_df.append(sampled_df)
 
+
+print('Reloading Stock Prices & determining price at Expiration', end='', flush=True)
+with pd.HDFStore(paths['prices_raw']) as store:
+    prices_raw = store['Prices_raw']
+prices_raw['permno'] = prices_raw['permno'].astype(np.int64)
+prices_raw['date'] = prices_raw['date'].astype('datetime64[ns]')
+prices_raw.set_index(['date','permno'],inplace=True)
+dateindex = prices_raw.index.get_level_values(0)
+stockindex = prices_raw.index.get_level_values(1)
+def get_prc_atExpiration(point):
+    idx = stockindex == point.name[1]
+    idx &= dateindex < point.expiration_date
+    return prices_raw.loc[idx, 'prc'].sort_index(axis=0, level=1).iloc[-1]
+
+'''
+
+    from tqdm import tqdm
+    tqdm.pandas()
+    downsampled_df.prc_atExpiration = downsampled_df.progress_apply(get_prc_atExpiration, axis=1)
+'''
+downsampled_df.prc_atExpiration = downsampled_df.apply(get_prc_atExpiration, axis=1)
+
+'''
+downsampled_df.shape
+def alternative_atExpiration():
+    print('Before atExpiration: NaN values: {:.2f}%'.format(merged.isna().any(axis=1).mean() * 100))
+    merged = pd.merge(
+        merged.reset_index(),
+        prices_raw.reset_index(),
+        left_on=['expiration_date', 'permno'],
+        right_on=['date', 'permno'],
+        how='left',
+        suffixes=('', '_atExpiration')
+    ).loc[:, list(merged.columns) + list(merged.index.names) + ['prc_atExpiration']].set_index(['date', 'permno'])
+    print('After atExpiration:  NaN values: {:.2f}%'.format(merged.isna().any(axis=1).mean() * 100))
+    
+    
+    open(paths['merged'], 'w').close()  # delete previous HDF
+    with pd.HDFStore(paths['merged']) as store:
+        # merged = store['merged_cat'].iloc[0:10000]
+        # last_names = store['last_names']
+        # store['merged'] = merged
+        store.append('merged_cat', merged)
+        store.append('last_names', last_names)
+    from tqdm import tqdm
+    tqdm.pandas()
+    pd.DataFrame(np.random.randint(0, int(1e8), (10000, 1000))).progress_apply(lambda x: x ** 2).shape
+    stockindex = prices_raw.index.get_level_values(1)
+    dateindex = prices_raw.index.get_level_values(0)
+
+    def get_prc_atExpiration(point):
+        idx = stockindex == point.name[1]
+        idx &= dateindex < point.expiration_date
+        return prices_raw.loc[idx, 'prc'].sort_index(axis=0, level=1).iloc[-1]
+
+    point = merged.iloc[0]
+    get_value_at_expiration(merged.iloc[0])
+
+    merged.shape
+    mini = merged.head(10000)
+    prc_atExpiration = mini.progress_apply(get_value_at_expiration, axis=1)
+    merged.shape
+'''
+
+downsampled_df.comnam = downsampled_df.comnam.astype('str')
+downsampled_df.ticker = downsampled_df.ticker.astype('str')
+
 print('Sorting index')
 data = downsampled_df.sort_index()
+
 
 print('data.shape: {}'.format(data.shape))
 
