@@ -675,7 +675,7 @@ def get_prc_atExpiration(point):
     tqdm.pandas()
     downsampled_df.prc_atExpiration = downsampled_df.progress_apply(get_prc_atExpiration, axis=1)
 '''
-downsampled_df.prc_atExpiration = downsampled_df.apply(get_prc_atExpiration, axis=1)
+downsampled_df['prc_atExpiration'] = downsampled_df.apply(get_prc_atExpiration, axis=1)
 
 '''
 downsampled_df.shape
