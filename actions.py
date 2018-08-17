@@ -246,15 +246,17 @@ def run_and_store_ANN(model, inSample=False, reset='yes', nb_epochs=5, data_pack
         sample["calculated_delta"] = deltas
         change_in_stock_value = ref_data['prc_atExpiration'] - ref_data['prc']
         if option_type == 'call':
-            option_payout = max(0, ref_data['prc_atExpiration'] - ref_data.strike_price)
+            option_payout = (ref_data['prc_atExpiration'] - ref_data.strike_price).clip(lower=0)
         elif option_type == 'put':
-            option_payout = max(0, ref_data.strike_price - ref_data['prc_atExpiration'])
+            option_payout = (ref_data.strike_price - ref_data['prc_atExpiration']).clip(lower=0)
         else:
             raise ValueError
         change_in_option_value = deltas * option_payout
         change_in_portfolio_value = change_in_stock_value - change_in_option_value
         sample["hedging_error"] = change_in_portfolio_value
         MSHE = (change_in_portfolio_value**2).mean()
+    else:
+        MSHE = None
     if type(Y_prediction) is list:
         sample["prediction"] = Y_prediction[0]
         sample["predicted_hedge_1"] = Y_prediction[1]
@@ -500,6 +502,8 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
 
     # data, X_synth, Y_synth, ref_data_tuple, scaler_X, scaler_Y = data_package
     data = data_package[0]
+    ref_data_tuple = data_package[3]
+    ref_data = ref_data_tuple[2]
     X_train, Y_train, X_test, Y_test = data
     if inSample:
         X_test, Y_test = X_train, Y_train
@@ -550,6 +554,16 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
     results['prediction'] = prediction.price
     results['delta'] = prediction.delta
     results['error'] = results.scaled_option_price - results.prediction
+    if option_type == 'call':
+        option_payout = (ref_data['prc_atExpiration'] - ref_data.strike_price).clip(lower=0)
+    elif option_type == 'put':
+        option_payout = (ref_data.strike_price - ref_data['prc_atExpiration']).clip(lower=0)
+    else:
+        raise ValueError
+    change_in_stock_value = ref_data['prc_atExpiration'] - ref_data['prc']
+    change_in_option_value = prediction.delta * option_payout
+    change_in_portfolio_value = change_in_stock_value - change_in_option_value
+    results["hedging_error"] = change_in_portfolio_value
 
     # results.error.hist(bins=200)
     # plt.show()
@@ -557,21 +571,9 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
     MAE = results.error.abs().mean()
     MSE = results.error.pow(2).mean()
     MAPE = (results.error / results.scaled_option_price).abs().mean()
+    MSHE = (change_in_portfolio_value**2).mean()
 
-    '''
-    b = results.loc[results.error.abs() == results.error.abs().max()].iloc[0]
-    m = b.moneyness
-    t = b.days
-    r = b.r
-    s = b.v60
-    print(t * 252)
-
-    df['d1'] = ((1 / (X_test.v60*X_test.days.pow(1/2)))*(np.log(X_test.moneyness)+((X_test.r+X_test.v60.pow(2))*X_test.days))).values
-    df['d2'] = df.d1 - (X_test.v60*X_test.days.pow(1/2)).values
-    df['p'] = df.d1.apply(norm.cdf)*X_test.moneyness.values - df.d2.apply(norm.cdf)*np.exp(-X_test.r*X_test.v60).values
-    '''
-
-    return MSE, MAE, MAPE
+    return MSE, MAE, MAPE, MSHE
 
 
 

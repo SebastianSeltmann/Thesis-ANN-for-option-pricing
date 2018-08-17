@@ -89,6 +89,8 @@ paths['results-excel'] = os.path.join(localpath, 'results_excel.xlsx')
 paths['results-excel-BS'] = os.path.join(localpath, 'results_excel-BS.xlsx')
 paths['gradients_data'] = os.path.join(rootpath,'gradients_data.h5')
 paths['all_models'] = os.path.join(rootpath, 'all_models', '{:%Y-%m-%d_%H-%M}'.format(datetime.now()))
+paths['sample_model'] = os.path.join(rootpath, 'all_models', 'sample_model.h5')
+paths['sample_data'] = os.path.join(rootpath, 'all_models', 'sample_data.h5')
 
 
 paths['prices_raw'] = os.path.join(rootpath, "prices.h5")

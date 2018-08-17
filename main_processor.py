@@ -286,11 +286,33 @@ def perform_experiment():
                 print(loss)
 
 
+
                 #filename = '{}_{:%Y-%m-%d_%H-%M}.h5'.format(model_name, datetime.now())
                 filename = model_name + '_' + starting_time_str + '.h5'
-
-
                 model.save(os.path.join(paths['all_models'], filename))
+
+
+                if i == 1 and j == i:
+                    # sample model to be particularly investigated
+
+                    loss, Y_prediction, history = run(model,
+                                                      data=data,
+                                                      reset='reuse',
+                                                      plot_prediction=False,
+                                                      segment_plot=False,
+                                                      verbose=0,
+                                                      model_name=model_name,
+                                                      inSample=False,
+                                                      batch_size=batch_size,
+                                                      starting_time_str=starting_time_str)
+
+                    model.save(paths['sample_model'])
+                    with pd.HDFStore(paths['sample_data']) as store:
+                        store['X_train'] = X_train
+                        store['X_test'] = X_val
+                        store['Y_train'] = data[1]
+                        store['Y_test'] = data[3]
+                        store['Y_prediction'] = pd.Series(Y_prediction.flatten())
 
 
                 # if rerun_id == 0:
@@ -396,7 +418,7 @@ def perform_experiment():
     if run_BS in ['yes', 'only_BS']: # not 'no'
         print('Running Black Scholes Benchmark')
 
-        BS_watches = ['stock', 'dt_start', 'dt_middle', 'dt_end', 'vol_proxy', 'MSE', 'MAE', 'MAPE']
+        BS_watches = ['stock', 'dt_start', 'dt_middle', 'dt_end', 'vol_proxy', 'MSE', 'MAE', 'MAPE', 'MSHE']
         BS_cols = {col: [] for col in BS_watches}
 
         i = 0
@@ -417,7 +439,7 @@ def perform_experiment():
                     end_train_start_val_date=dt_middle,
                     end_val_date=dt_end
                 )
-                MSE, MAE, MAPE = run_black_scholes(data_package, vol_proxy=vol_proxy)
+                MSE, MAE, MAPE, MSHE = run_black_scholes(data_package, vol_proxy=vol_proxy)
                 print(MSE)
 
                 BS_cols['stock'].append(stock)
@@ -428,6 +450,7 @@ def perform_experiment():
                 BS_cols['MSE'].append(MSE)
                 BS_cols['MAE'].append(MAE)
                 BS_cols['MAPE'].append(MAPE)
+                BS_cols['MSHE'].append(MSHE)
 
         BS_results_df = pd.DataFrame(BS_cols)
 
