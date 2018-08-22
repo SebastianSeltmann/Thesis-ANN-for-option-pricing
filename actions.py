@@ -5,6 +5,7 @@ from scipy.stats import norm
 from time import time
 from datetime import datetime, timedelta
 import os
+from collections import namedtuple
 
 import tensorflow as tf
 from keras import backend as K
@@ -19,7 +20,7 @@ from config import (
     onCluster,
     useEarlyStopping,
     cd_of_quotes_to_consider_for_vol_surf,
-    option_type,
+    option_type
 )
 
 from data import (
@@ -104,7 +105,7 @@ def get_data_package(model, columns=['days', 'moneyness'], include_synth=False, 
         else:
             output_columns = ['scaled_option_price']
     # ref_columns = ['prc', 'option_price', 'strike_price', 'prc_shifted_1', 'option_price_shifted_1']
-    ref_columns = ['prc', 'option_price', 'strike_price', 'prc_atExpiration']
+    ref_columns = ['prc', 'option_price', 'strike_price', 'prc_atExpiration', 'r', 'days']
 
     data = get_data_window(
         input_columns=columns,
@@ -163,6 +164,32 @@ def get_data_package(model, columns=['days', 'moneyness'], include_synth=False, 
 
         data = X_train_scaled, Y_train_scaled, X_val_scaled, Y_val_scaled
     return data, X_synth, Y_synth, ref_data, scaler_X, scaler_Y
+
+def getHedgingErrors(deltas, ref_data, option_type):
+    if option_type == 'call':
+        option_payout = (ref_data['prc_atExpiration'] - ref_data.strike_price).clip(lower=0)
+    elif option_type == 'put':
+        option_payout = (ref_data.strike_price - ref_data['prc_atExpiration']).clip(lower=0)
+    else:
+        raise ValueError
+
+    w_option = -1
+    w_stock = - deltas / w_option
+    w_residual = -(w_stock * ref_data['prc'] + w_option * ref_data.option_price)
+
+    portfolio_value_now = w_stock * ref_data['prc'] + w_option * ref_data.option_price + w_residual
+    assert (portfolio_value_now == 0).all()
+
+    residual_appreciation = np.exp(np.array(ref_data.r * ref_data.days / np.float(365), dtype=np.float64))
+    portfolio_value_later = w_stock * ref_data[
+        'prc_atExpiration'] + w_option * option_payout + w_residual * residual_appreciation
+    change_in_portfolio_value = portfolio_value_later
+    PHE = change_in_portfolio_value / ref_data['prc']
+
+    MSHE = (change_in_portfolio_value ** 2).mean()
+    MAPHE = PHE.mean()
+    HedgingResult = namedtuple('HedgingResult', 'hedging_error percentage_hedging_error MSHE MAPHE')
+    return HedgingResult(change_in_portfolio_value, PHE, MSHE, MAPHE)
 
 
 def run_and_store_ANN(model, inSample=False, reset='yes', nb_epochs=5, data_package=None, verbose=0, model_name='custom',
@@ -244,19 +271,14 @@ def run_and_store_ANN(model, inSample=False, reset='yes', nb_epochs=5, data_pack
     if get_deltas:
         deltas = extract_deltas(model, sample, ref_data.loc[:,'strike_price'])
         sample["calculated_delta"] = deltas
-        change_in_stock_value = ref_data['prc_atExpiration'] - ref_data['prc']
-        if option_type == 'call':
-            option_payout = (ref_data['prc_atExpiration'] - ref_data.strike_price).clip(lower=0)
-        elif option_type == 'put':
-            option_payout = (ref_data.strike_price - ref_data['prc_atExpiration']).clip(lower=0)
-        else:
-            raise ValueError
-        change_in_option_value = deltas * option_payout
-        change_in_portfolio_value = change_in_stock_value - change_in_option_value
-        sample["hedging_error"] = change_in_portfolio_value
-        MSHE = (change_in_portfolio_value**2).mean()
+
+        HE, PHE, MSHE, MAPHE = getHedgingErrors(deltas, ref_data, option_type)
+        sample["hedging_error"] = HE
+        sample['percentage_hedging_error'] = PHE
+
     else:
         MSHE = None
+        MAPHE = None
     if type(Y_prediction) is list:
         sample["prediction"] = Y_prediction[0]
         sample["predicted_hedge_1"] = Y_prediction[1]
@@ -303,8 +325,8 @@ def run_and_store_ANN(model, inSample=False, reset='yes', nb_epochs=5, data_pack
     # if len(loss)> 0:
     #     success = loss[-1] < required_precision
     # else: success = True
-    return history, last_loss, loss_tuple, MSHE
-
+    ANNResult = namedtuple('ANNResult', 'history last_loss loss_tuple MSHE MAPHE')
+    return ANNResult(history, last_loss, loss_tuple, MSHE, MAPHE)
 
 class TrainValTensorBoard(TensorBoard):
     # https://stackoverflow.com/questions/47877475/keras-tensorboard-plot-train-and-validation-scalars-in-a-same-figure/48393723
@@ -554,26 +576,17 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
     results['prediction'] = prediction.price
     results['delta'] = prediction.delta
     results['error'] = results.scaled_option_price - results.prediction
-    if option_type == 'call':
-        option_payout = (ref_data['prc_atExpiration'] - ref_data.strike_price).clip(lower=0)
-    elif option_type == 'put':
-        option_payout = (ref_data.strike_price - ref_data['prc_atExpiration']).clip(lower=0)
-    else:
-        raise ValueError
-    change_in_stock_value = ref_data['prc_atExpiration'] - ref_data['prc']
-    change_in_option_value = prediction.delta * option_payout
-    change_in_portfolio_value = change_in_stock_value - change_in_option_value
-    results["hedging_error"] = change_in_portfolio_value
 
-    # results.error.hist(bins=200)
-    # plt.show()
+    HE, PHE, MSHE, MAPHE = getHedgingErrors(prediction.delta, ref_data, option_type)
+
+    results["hedging_error"] = HE
 
     MAE = results.error.abs().mean()
     MSE = results.error.pow(2).mean()
     MAPE = (results.error / results.scaled_option_price).abs().mean()
-    MSHE = (change_in_portfolio_value**2).mean()
 
-    return MSE, MAE, MAPE, MSHE
+    BSResult = namedtuple('BSResult', 'MSE MAE MAPE MSHE MAPHE')
+    return BSResult(MSE, MAE, MAPE, MSHE, MAPHE)
 
 
 

@@ -111,7 +111,7 @@ def perform_experiment():
                    'batch_normalization', 'loss', 'loss_oos', 'used_synth', 'normalize', 'dropout', 'batch_size',
                    'failed', 'loss_mean', 'loss_std', 'val_loss_mean', 'val_loss_std', 'stock', 'dt_start', 'dt_middle',
                    'dt_end', 'duration', 'N_train', 'N_val', 'regularizer', 'useEarlyStopping', 'loss_func', 'MSHE',
-                   'MSHE_oos']
+                   'MSHE_oos', 'MAPHE', 'MAPHE_oos']
 
         cols = {col: [] for col in watches}
 
@@ -188,11 +188,12 @@ def perform_experiment():
                 starting_time = datetime.now()
                 starting_time_str = '{:%Y-%m-%d_%H-%M}'.format(starting_time)
 
-                initial_hist, initial_loss, _, _ = run_and_store_ANN(model=model, inSample=True, model_name='i_'+model_name+'_inSample',
+                annResult = run_and_store_ANN(model=model, inSample=True, model_name='i_'+model_name+'_inSample',
                                   nb_epochs=separate_initial_epochs, reset='yes', columns=used_features,
                                   include_synth=include_synthetic_data, normalize=normalization, batch_size=batch_size,
                                                        data_package=data_package, starting_time_str=starting_time_str)
-
+                initial_hist = annResult.history
+                initial_loss = annResult.last_loss
 
 
                 if initial_loss > required_precision:
@@ -204,20 +205,24 @@ def perform_experiment():
 
                 else:
                     cols['failed'].append(int(False))
-                    hist, loss, loss_tuple, MSHE = run_and_store_ANN(model=model, inSample=True, model_name=model_name+'_inSample',
+                    annResult = run_and_store_ANN(model=model, inSample=True, model_name=model_name+'_inSample',
                                                 nb_epochs=epochs - separate_initial_epochs, reset='continue',
                                                 columns=used_features, get_deltas=True,
                                                 include_synth=include_synthetic_data,
                                                 normalize=normalization, batch_size=batch_size,
                                                             data_package=data_package, starting_time_str=starting_time_str)
+                    hist, loss, loss_tuple, MSHE, MAPHE = annResult
 
 
-
-                    _, loss_oos, _, MSHE_oos = run_and_store_ANN(model=model, inSample=False,
+                    annResult = run_and_store_ANN(model=model, inSample=False,
                                                     model_name=model_name+'_outSample', reset='reuse',
                                                     columns=used_features, get_deltas=True,
                                                     normalize=normalization, batch_size=batch_size,
                                                        data_package=data_package, starting_time_str=starting_time_str)
+                    loss_oos = annResult.last_loss
+                    MSHE_oos = annResult.MSHE
+                    MAPHE_oos = annResult.MAPHE
+
                     if useEarlyStopping:
                         actual_epochs = len(hist.history['loss'])+len(initial_hist.history['loss'])
 
@@ -264,6 +269,8 @@ def perform_experiment():
                 cols['val_loss_std'].append(last_val_losses_std)
                 cols['MSHE'].append(MSHE)
                 cols['MSHE_oos'].append(MSHE_oos)
+                cols['MAPHE'].append(MAPHE)
+                cols['MAPHE_oos'].append(MAPHE_oos)
 
                 cols['epochs'].append(actual_epochs)
                 cols['optimizer'].append(optimizer)
@@ -439,7 +446,7 @@ def perform_experiment():
                     end_train_start_val_date=dt_middle,
                     end_val_date=dt_end
                 )
-                MSE, MAE, MAPE, MSHE = run_black_scholes(data_package, vol_proxy=vol_proxy)
+                MSE, MAE, MAPE, MSHE, MAPHE = run_black_scholes(data_package, vol_proxy=vol_proxy)
                 print(MSE)
 
                 BS_cols['stock'].append(stock)
@@ -451,6 +458,7 @@ def perform_experiment():
                 BS_cols['MAE'].append(MAE)
                 BS_cols['MAPE'].append(MAPE)
                 BS_cols['MSHE'].append(MSHE)
+                BS_cols['MAPHE'].append(MAPHE)
 
         BS_results_df = pd.DataFrame(BS_cols)
 
