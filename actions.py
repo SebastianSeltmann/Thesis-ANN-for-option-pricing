@@ -572,7 +572,7 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
 
 
     prediction = X_test.apply(BS_predict, axis=1)
-
+    assert not prediction.isnull().any().any()
 
     results = X_test.copy()
     results['scaled_option_price'] = Y_test['scaled_option_price']
