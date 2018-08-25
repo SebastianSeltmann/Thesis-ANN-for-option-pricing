@@ -62,6 +62,9 @@ def perform_experiment():
     except FileNotFoundError:
         runID = 1
 
+    if not os.path.exists(paths['all_models']):
+        os.makedirs(paths['all_models'])
+
     if run_BS != 'only_BS':
 
         msg = 'Evaluating {} different settings with {} feature combinations, in {} windows, ' \
