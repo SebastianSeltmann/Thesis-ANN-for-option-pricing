@@ -159,7 +159,9 @@ def get_data_package(model, columns=['days', 'moneyness'], include_synth=False, 
         Y_val_scaled = pd.DataFrame(np_Y_val_scaled, index=Y_val.index, columns=Y_val.columns)
 
         data = X_train_scaled, Y_train_scaled, X_val_scaled, Y_val_scaled
-    return data, X_synth, Y_synth, ref_data, scaler_X, scaler_Y
+
+    DataPackage = namedtuple('DataPackage', 'data X_synth Y_synth ref_data scaler_X scaler_Y')
+    return DataPackage(data, X_synth, Y_synth, ref_data, scaler_X, scaler_Y)
 
 def getHedgingErrors(deltas, ref_data, option_type):
     if option_type == 'call':

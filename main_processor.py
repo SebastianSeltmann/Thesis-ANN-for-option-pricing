@@ -39,33 +39,33 @@ from actions import (
     get_gradients,
     get_SSD,
 )
+from data import (
+    windows_list,
+    window_combi_count,
+)
 if not onCluster:
     from plotting_actions import (
         get_and_plot,
         boxplot_SSD_distribution,
     )
-from data import (
-    windows_list,
-    window_combi_count,
-)
+
 
 def perform_experiment():
 
-    interrupt_flag = False
+    # Initializing some variables to suppress linter warnings
+    data_package = shared_layers = individual_layers = MSHE = MSHE_oos = MAPHE = MAPHE_oos = None
+    N_train = N_val = X_train = X_val = data = scaler_X = model_name = None
 
-    # tt_start = datetime.now()
-    # tt_end = datetime.now()
-    # print((tt_end - tt_start).seconds, end=' a- ')
-    # tt_start = datetime.now()
     try:
         with pd.ExcelFile(paths['results-excel']) as reader:
             runID = reader.parse("RunData")['runID'].max() + 1
-    except:
+    except FileNotFoundError:
         runID = 1
 
     if run_BS != 'only_BS':
 
-        msg = 'Evaluating {} different settings with {} feature combinations, in {} windows, each {} times for a total of {} runs.'
+        msg = 'Evaluating {} different settings with {} feature combinations, in {} windows, ' \
+              'each {} times for a total of {} runs.'
         print(msg.format(int(settings_combi_count / len(active_feature_combinations)),
                          len(active_feature_combinations),
                          window_combi_count,
@@ -82,53 +82,51 @@ def perform_experiment():
         cols = {col: [] for col in watches}
 
         i = 0
-        for settings in itertools.product(*settings_list): # equivalent to a bunch of nested for-loops
+        for settings in itertools.product(*settings_list):  # equivalent to a bunch of nested for-loops
             i += 1
             SSD_distribution_train = []
             SSD_distribution_val = []
-            act, n, l, optimizer, include_synthetic_data, dropout_rate, normalization, batch_size, regularizer, c = settings
+            (act, n, layers, optimizer, include_synthetic_data, dropout_rate,
+             normalization, batch_size, regularizer, c) = settings
             used_features = full_feature_combination_list[c]
-            if type(l) is tuple:
-                sl, il = l
-                l = sl + il
-
+            if type(layers) is tuple:
+                shared_layers, individual_layers = layers
+                layers = shared_layers + individual_layers
             j = 0
             for window in itertools.product(*windows_list):
                 j += 1
                 stock, date_tuple, rerun_id = window
                 dt_start, dt_middle, dt_end = date_tuple
 
-                print('{}.{}'.format(i,j), end=' ', flush=True)
+                print('{}.{}'.format(i, j), end=' ', flush=True)
 
                 # We reinitialize these variables to None because they will be appended to cols
                 loss_oos = last_losses_mean = last_losses_std = last_val_losses_mean =\
                     last_val_losses_std = None
 
                 pattern = 'c{}_act{}_lf{}_l{}_n{}_o{}_bn{}_do{}_s{}_no{}_bs{}_r{}'
-                model_name = pattern.format(c, act, loss_func, l, n, optimizer, int(batch_normalization),
+                model_name = pattern.format(c, act, loss_func, layers, n, optimizer, int(batch_normalization),
                                             int(dropout_rate*10), int(include_synthetic_data),
                                             normalization, batch_size, regularizer)
-
 
                 if multi_target:
                     model_name = 'multit_'+model_name
                     print(model_name, end=': ', flush=True)
 
-                    model = multitask_model(input_dim=len(used_features), shared_layers=sl,
-                                            individual_layers=il, nodes_per_layer=n,
+                    model = multitask_model(input_dim=len(used_features), shared_layers=shared_layers,
+                                            individual_layers=individual_layers, nodes_per_layer=n,
                                             activation=act, use_batch_normalization=batch_normalization,
                                             optimizer=optimizer)
                 else:
                     model_name = 'full_'+model_name
                     print(model_name, end=': ', flush=True)
 
-                    model = full_model(input_dim=len(used_features), num_layers=l, nodes_per_layer=n,
+                    model = full_model(input_dim=len(used_features), num_layers=layers, nodes_per_layer=n,
                                        loss=loss_func, activation=act, optimizer=optimizer,
                                        use_batch_normalization=batch_normalization,
                                        dropout_rate=dropout_rate, regularizer=regularizer)
 
                 model.name = model_name
-
 
                 # when rerun_id is 0, that means we just switched to a new stock or date, or setting
                 # that is when we need to get the data again
@@ -155,12 +153,12 @@ def perform_experiment():
                 starting_time_str = '{:%Y-%m-%d_%H-%M}'.format(starting_time)
 
                 annResult = run_and_store_ANN(model=model, inSample=True, model_name='i_'+model_name+'_inSample',
-                                  nb_epochs=separate_initial_epochs, reset='yes', columns=used_features,
-                                  include_synth=include_synthetic_data, normalize=normalization, batch_size=batch_size,
-                                                       data_package=data_package, starting_time_str=starting_time_str)
+                                              nb_epochs=separate_initial_epochs, reset='yes', columns=used_features,
+                                              include_synth=include_synthetic_data, normalize=normalization,
+                                              batch_size=batch_size, data_package=data_package,
+                                              starting_time_str=starting_time_str)
                 initial_hist = annResult.history
                 initial_loss = annResult.last_loss
-
 
                 if initial_loss > required_precision:
                     print('FAILED', end=' ')
@@ -172,19 +170,17 @@ def perform_experiment():
                 else:
                     cols['failed'].append(int(False))
                     annResult = run_and_store_ANN(model=model, inSample=True, model_name=model_name+'_inSample',
-                                                nb_epochs=epochs - separate_initial_epochs, reset='continue',
-                                                columns=used_features, get_deltas=True,
-                                                include_synth=include_synthetic_data,
-                                                normalize=normalization, batch_size=batch_size,
-                                                            data_package=data_package, starting_time_str=starting_time_str)
+                                                  nb_epochs=epochs - separate_initial_epochs, reset='continue',
+                                                  columns=used_features, get_deltas=True,
+                                                  include_synth=include_synthetic_data, normalize=normalization,
+                                                  batch_size=batch_size, data_package=data_package,
+                                                  starting_time_str=starting_time_str)
                     hist, loss, loss_tuple, MSHE, MAPHE = annResult
 
-
-                    annResult = run_and_store_ANN(model=model, inSample=False,
-                                                    model_name=model_name+'_outSample', reset='reuse',
-                                                    columns=used_features, get_deltas=True,
-                                                    normalize=normalization, batch_size=batch_size,
-                                                       data_package=data_package, starting_time_str=starting_time_str)
+                    annResult = run_and_store_ANN(model=model, inSample=False, model_name=model_name+'_outSample',
+                                                  reset='reuse', columns=used_features, get_deltas=True,
+                                                  normalize=normalization, batch_size=batch_size,
+                                                  data_package=data_package, starting_time_str=starting_time_str)
                     loss_oos = annResult.last_loss
                     MSHE_oos = annResult.MSHE
                     MAPHE_oos = annResult.MAPHE
@@ -194,17 +190,14 @@ def perform_experiment():
 
                     (last_losses_mean, last_losses_std, last_val_losses_mean, last_val_losses_std) = loss_tuple
 
-
-
-                    data, _, _, _, scaler_X, scaler_Y = data_package
+                    data = data_package.data
+                    scaler_X = data_package.scaler_X
                     X_train = data[0]
                     X_val = data[2]
                     SSD_train = get_SSD(model, X_train)
                     SSD_val = get_SSD(model, X_val)
                     SSD_distribution_train.append(SSD_train)
                     SSD_distribution_val.append(SSD_val)
-
-
 
                 model_end_time = datetime.now()
 
@@ -213,7 +206,6 @@ def perform_experiment():
                 # reducing the long string of fama & french factors down
                 if pos_fff > -1:
                     feature_string = feature_string[0:pos_fff] + "_fff"
-
 
                 cols['model_name'].append(model_name)
                 cols['time'].append(datetime.now())
@@ -225,7 +217,6 @@ def perform_experiment():
                 cols['dt_start'].append(dt_start)
                 cols['dt_middle'].append(dt_middle)
                 cols['dt_end'].append(dt_end)
-
 
                 cols['loss'].append(loss)
                 cols['loss_oos'].append(loss_oos)
@@ -243,7 +234,7 @@ def perform_experiment():
                 cols['lr'].append(lr)
                 cols['features'].append(feature_string)
                 cols['activation'].append(act)
-                cols['layers'].append(l)
+                cols['layers'].append(layers)
                 cols['nodes'].append(n)
                 cols['batch_normalization'].append(batch_normalization)
                 cols['loss_func'].append(loss_func)
@@ -258,12 +249,8 @@ def perform_experiment():
                 print((model_end_time - starting_time).seconds, end=' - ')
                 print(loss)
 
-
-
-                #filename = '{}_{:%Y-%m-%d_%H-%M}.h5'.format(model_name, datetime.now())
                 filename = model_name + '_' + starting_time_str + '.h5'
                 model.save(os.path.join(paths['all_models'], filename))
-
 
                 if i == 1 and j == i:
                     # sample model to be particularly investigated
@@ -329,9 +316,6 @@ def perform_experiment():
                         with pd.HDFStore(paths['gradients_data'], mode='a') as store:
                             store.append('gradients_data', gradients_df, index=False, data_columns=True)
 
-                if interrupt_flag:
-                    break
-
                 K.clear_session()
                 tf.reset_default_graph()
 
@@ -353,15 +337,11 @@ def perform_experiment():
                         with pd.HDFStore(paths['data_for_latex']) as store:
                             previous_results = store['SSDD_df']
                             merged_results = pd.concat([merged_results, previous_results])
-                    except:
+                    except FileNotFoundError:
                         pass
 
                     with pd.HDFStore(paths['data_for_latex']) as store:
                         store['SSDD_df'] = merged_results
-
-                    # key = 'SSDD_df' if i == 1 else 'SSDD_df_{}'.format(i)
-                    # with pd.HDFStore(paths['data_for_latex']) as store:
-                    #     store[key] = SSDD_df
 
         results_df = pd.DataFrame(cols)
         results_df['runID'] = runID
@@ -371,7 +351,7 @@ def perform_experiment():
                 with pd.ExcelFile(paths['results-excel']) as reader:
                     previous_results = reader.parse("RunData")
                 merged_results = pd.concat([results_df, previous_results])
-            except:
+            except FileNotFoundError:
                 merged_results = results_df
 
             with pd.ExcelWriter(paths['results-excel']) as writer:
@@ -386,8 +366,7 @@ def perform_experiment():
                 get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='calculated_delta')
                 get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='scaled_option_price')
 
-
-    if run_BS in ['yes', 'only_BS']: # not 'no'
+    if run_BS in ['yes', 'only_BS']:  # not 'no'
         print('Running Black Scholes Benchmark')
 
         BS_watches = ['stock', 'dt_start', 'dt_middle', 'dt_end', 'vol_proxy', 'MSE', 'MAE', 'MAPE', 'MSHE', 'MAPHE']
@@ -435,9 +414,8 @@ def perform_experiment():
                     BS_results_df['runID'] = BS_previous_results.runID.max()+1
                 else:
                     BS_results_df['runID'] = runID
-                #runID = BS_previous_results['runID'].max()+1
                 BS_merged_results = pd.concat([BS_results_df, BS_previous_results])
-            except:
+            except FileNotFoundError:
                 BS_results_df['runID'] = 1
                 BS_merged_results = BS_results_df
 
@@ -446,9 +424,8 @@ def perform_experiment():
                 writer.save()
         print('BS done')
 
-
-
     print('Close')
+
 
 if __name__ == '__main__':
     perform_experiment()
