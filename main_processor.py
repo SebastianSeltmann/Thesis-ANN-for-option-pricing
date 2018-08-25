@@ -424,7 +424,7 @@ def perform_experiment():
     if run_BS in ['yes', 'only_BS']: # not 'no'
         print('Running Black Scholes Benchmark')
 
-        BS_watches = ['stock', 'dt_start', 'dt_middle', 'dt_end', 'vol_proxy', 'MSE', 'MAE', 'MAPE', 'MSHE']
+        BS_watches = ['stock', 'dt_start', 'dt_middle', 'dt_end', 'vol_proxy', 'MSE', 'MAE', 'MAPE', 'MSHE', 'MAPHE']
         BS_cols = {col: [] for col in BS_watches}
 
         i = 0
