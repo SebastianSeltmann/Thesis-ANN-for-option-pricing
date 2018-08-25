@@ -321,14 +321,12 @@ def perform_experiment():
                         store['Y_test'] = data[3]
                         store['Y_prediction'] = pd.Series(Y_prediction.flatten())
 
-
-                # if rerun_id == 0:
-                #     scatterplot_PAD(model, [X_train, X_val], i)
-                is_All_or_None_Run = len(used_features) in ([2, 4, len(full_feature_combination_list[-1])])
+                featureCounts_to_record = [len(full_feature_combination_list[-1])]
+                is_All_or_None_Run = len(used_features) in featureCounts_to_record
                 if collect_gradients_data and is_All_or_None_Run:
                     gradient_df_columns = ['model_name', 'time', 'sample', 'feature', 'feature_value', 'gradient',
-                                           'stock', 'dt_start', 'runID', 'num_features']
-                    #scaler_X, scaler_Y
+                                           'stock', 'dt_start', 'runID', 'num_features', 'moneyness']
+                    
                     grad_data = {key: [] for key in gradient_df_columns}
 
                     sampling_dict = dict(train=X_train, test=X_val)
@@ -340,7 +338,12 @@ def perform_experiment():
                         points = pd.DataFrame(rescaled, index=points.index, columns=points.columns)
 
                         for feature_iloc, feature_name in enumerate(points.columns):
-                            for value, gradient in zip(points.iloc[:, feature_iloc], gradients[:, feature_iloc]):
+                            iterator = zip(
+                                points.iloc[:, feature_iloc],
+                                gradients[:, feature_iloc],
+                                points.loc[:, 'moneyness']
+                            )
+                            for value, gradient, moneyness in iterator:
                                 grad_data['model_name'].append(model_name)
                                 grad_data['time'].append(starting_time)
                                 grad_data['sample'].append(sample_key)
@@ -351,18 +354,14 @@ def perform_experiment():
                                 grad_data['dt_start'].append(dt_start)
                                 grad_data['runID'].append(runID)
                                 grad_data['num_features'].append(len(points.columns))
+                                grad_data['moneyness'].append(moneyness)
 
                     gradients_df = pd.DataFrame(grad_data)
 
                     if limit_windows != 'mock-testing':
-                        with pd.HDFStore(paths['gradients_data']) as store:
-                            try:
-                                previous_gradients_df = store['gradients_data']
-                                merged_gradients_df = pd.concat([gradients_df, previous_gradients_df])
-                            except:
-                                merged_gradients_df = gradients_df
-                            store['gradients_data'] = merged_gradients_df
 
+                        with pd.HDFStore(paths['gradients_data'], mode='a') as store:
+                            store.append('gradients_data', gradients_df, index=False, data_columns=True)
 
                 if interrupt_flag:
                     break
@@ -420,7 +419,7 @@ def perform_experiment():
                 get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='error')
                 get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='calculated_delta')
                 get_and_plot([model_name+'_inSample', model_name+'_outSample'], variable='scaled_option_price')
-    # cols = {col: [] for col in watches}
+
 
     if run_BS in ['yes', 'only_BS']: # not 'no'
         print('Running Black Scholes Benchmark')
