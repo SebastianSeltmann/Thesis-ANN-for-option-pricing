@@ -496,11 +496,13 @@ def extract_deltas(model, inputs, strikes):
     listOfInputs = model.inputs
     gradients = K.gradients(outputTensor, listOfInputs)
 
+    moneyness_loc = inputs.columns.get_loc('moneyness')
+
     sess = K.get_session()
     gradients_of_individual_inputs = sess.run(gradients, feed_dict={model.input: np.array(inputs)})[0]
-    moneyness_derivative = pd.Series([gradients_row[0] for gradients_row in gradients_of_individual_inputs])
+    moneyness_derivative = pd.Series([gradients_row[moneyness_loc] for gradients_row in gradients_of_individual_inputs])
     moneyness_derivative.index = strikes.index
-    deltas = moneyness_derivative * strikes
+    deltas = moneyness_derivative
     return deltas
 
 
@@ -559,7 +561,6 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
         elif vol_proxy == 'hist_realized':
             vola = v60
         elif vol_proxy == 'surface':
-            # idx = df.isin(dateIndex.unique()[-11:-1])
             idx = (dateIndex < date) & (dateIndex > date - timedelta(days=cd_of_quotes_to_consider_for_vol_surf))
             relevant_quotes = df.loc[idx]
             vola = bilinear_vsurface_interpolation(relevant_quotes, days, moneyness)
