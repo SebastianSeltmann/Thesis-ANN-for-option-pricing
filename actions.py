@@ -553,6 +553,7 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
             raise ValueError("optiontype must be 'call' or 'put'")
         return price, delta
 
+
     def BS_predict(point):
         days, moneyness, hist_impl_volatility, v60, r = tuple(point)
         date = point.name[0]
@@ -568,6 +569,7 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
             raise ValueError
         result = black_scholes_pricer(moneyness, days, r, vola)
         return pd.Series(result, index=['price', 'delta'])
+
 
     prediction = X_test.apply(BS_predict, axis=1)
 
@@ -603,7 +605,7 @@ def bilinear_vsurface_interpolation(quotes, ttm, mon):
         interp_later = later_than.loc[['impl_volatility', 'days']]
     else:
         lower_than_later = later_than.loc[later_than.moneyness <= mon]
-        higher_than_later = later_than.loc[later_than.moneyness >= mon]
+        higher_than_later = later_than.loc[later_than.moneyness > mon]
 
         if len(lower_than_later) == 0:
             higher_than_later = higher_than_later.sort_values('moneyness', ascending=False).iloc[-1]
@@ -625,7 +627,7 @@ def bilinear_vsurface_interpolation(quotes, ttm, mon):
         interp_earlier = earlier_than.loc[['impl_volatility', 'days']]
     else:
         lower_than_earlier = earlier_than.loc[earlier_than.moneyness <= mon]
-        higher_than_earlier = earlier_than.loc[earlier_than.moneyness >= mon]
+        higher_than_earlier = earlier_than.loc[earlier_than.moneyness > mon]
 
 
         if len(lower_than_earlier) == 0:
