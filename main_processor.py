@@ -30,53 +30,24 @@ from config import (
 from models import (
     full_model,
     multitask_model,
-    black_scholes_price,
-
-    stupid_model,
-    deep_model,
-    adding_sample_model,
-    rational_model,
-    rational_model_v2,
-    rational_multi_model,
-    custom_model,
-
 )
 from actions import (
     get_data_package,
     run_and_store_ANN,
-    get_data_for_single_stock_and_day,
-    # prepare_data_for_rational_approach,
-    # prepare_data_for_full_approach,
     run,
-    get_input_gradients_at_point,
-    extract_deltas,
     run_black_scholes,
     get_gradients,
     get_SSD,
 )
 if not onCluster:
     from plotting_actions import (
-        vol_surface_plot,
         get_and_plot,
         boxplot_SSD_distribution,
-        moving_average,
-        plot_error_over_epochs,
-        plot_surface_of_ANN,
-        scatterplot_PAD
     )
 from data import (
     windows_list,
     window_combi_count,
 )
-'''
-from data import (
-    sorted_train,
-    train,
-    validate,
-    some_stock,
-    single_stock
-)
-'''
 
 def perform_experiment():
 
