@@ -187,7 +187,7 @@ def getHedgingErrors(deltas, ref_data, option_type):
     PHE = change_in_portfolio_value / ref_data['prc']
 
     MSHE = (change_in_portfolio_value ** 2).mean()
-    MAPHE = PHE.mean()
+    MAPHE = PHE.abs().mean()
     HedgingResult = namedtuple('HedgingResult', 'hedging_error percentage_hedging_error MSHE MAPHE')
     return HedgingResult(change_in_portfolio_value, PHE, MSHE, MAPHE)
 
