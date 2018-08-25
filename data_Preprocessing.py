@@ -740,7 +740,8 @@ def generate_synthetic_data(option_type='call'):
 
     print('Generating synthetic contracts at boundary condition S >> K')
     K = 100
-    for S in range(int(K * 3.5), int(K * 6), 50):
+    #for S in range(int(K * 3.5), int(K * 6), 50):
+    for S in range(int(K * 15), int(K * 20), 100):
         for days in range(2, 60):
             days = days / 365
 
