@@ -2,7 +2,7 @@ from scipy.stats import norm
 import numpy as np
 from keras.models import Sequential
 from keras import layers, models, regularizers
-from keras.layers import Dense, Dropout, Activation
+from keras.layers import Dense, Dropout
 from keras.utils import plot_model
 from keras import backend as K
 from keras.engine.topology import Layer

@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from plotly.offline import download_plotlyjs, init_notebook_mode, plot, iplot
+from plotly.offline import plot
 import plotly.graph_objs as go
 import os
 

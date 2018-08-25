@@ -12,11 +12,8 @@ from keras import backend as K
 from keras.callbacks import TensorBoard, EarlyStopping
 
 
-from matplotlib import pyplot as plt
-
 from config import (
     paths,
-    required_precision,
     onCluster,
     useEarlyStopping,
     cd_of_quotes_to_consider_for_vol_surf,
@@ -29,7 +26,6 @@ from data import (
     synth
 )
 
-from models import black_scholes_price
 
 
 def timeit(method):

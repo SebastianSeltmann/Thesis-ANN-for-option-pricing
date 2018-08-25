@@ -12,10 +12,6 @@ from config import (
 )
 
 with pd.HDFStore(paths['options_for_ann']) as store:
-    # train = store['train']
-    # validate = store['validate']
-    # test = store['test']
-    # single_stock = store['single']
     data = store['data']
     synth = store['synthetic']
     availability_summary = store['availability_summary']
