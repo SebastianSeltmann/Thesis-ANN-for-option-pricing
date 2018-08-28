@@ -1,4 +1,3 @@
-import sys
 import pandas as pd
 import numpy as np
 import datetime
@@ -34,24 +33,6 @@ if not onCluster:
 
     quandl.ApiConfig.api_key = quandl_key
 
-'''
-    [
-        'days',
-        'option_price',
-        'impl_volatility',
-        'delta',
-        'strike_price',
-        'prc',
-        'returns',
-        'v110',
-        'v60',
-        'v20',
-        'v5',
-        'r',
-        'moneyness',
-        'scaled_option_price'
-    ]
- '''
 
 def show_largest_objects(locality='global'):
     import operator
@@ -68,18 +49,14 @@ def show_largest_objects(locality='global'):
     for key, obj in copy.items():
         size_dict[key] = sys.getsizeof(copy[key])
     sorted_locals = sorted(size_dict.items(), key=operator.itemgetter(1))
-    for tuple in sorted_locals[-6:-1]:
-        name, size = tuple
+    for objecttuple in sorted_locals[-6:-1]:
+        name, size = objecttuple
         print('{}: {}'.format(name, size))
 
 
 def fetch_and_store_sp500(db):
-    ## ---------------------- WRDS CONNECTION  ------------------------
-
     if db is None:
         db = wrds.Connection()
-
-    ## ----------------- SOURCING S&P 500 CONSTITUENTS --------------------
 
     # source historical S&P 500 constituents
     const = db.get_table('compm', 'idxcst_his')
@@ -89,30 +66,20 @@ def fetch_and_store_sp500(db):
     crsp_id = crsp_id[crsp_id['ending'] > "1990-12-31"]
     permnos = crsp_id['PERMNO'].values
 
-    ## ------------------ SOURCING ACCOUNTING DATA -------------------------
-
-    # Test source of accounting data
-    # gvkeys_list = gvkeys.values
-    # SP500_price = db.raw_sql("Select PRCCD,  from comp.g_secd where GVKEY in (" + ", ".join(str(x) for x in gvkeys_list) + ")")
-
-    # No permission to access through python. Check WRDS online querry
-
-
-    ## ------------------- SOURCING PRICE DATA -----------------------------
     print('Loading Price Data')
     permnolist = ", ".join(str(x) for x in permnos)
-    prices = db.raw_sql(
-        "Select date, permno, cusip, PRC, shrout "
-        "from crspa.dsf "
-        "where permno in ({}) "
-        "and date between '{}-01-01' and '{}-01-01'".format(permnolist, start_year, end_year)
+    prices_raw = db.raw_sql(
+        'Select date, permno, cusip, PRC, shrout '
+        'from crspa.dsf '
+        'where permno in ({}) '
+        'and date between \'{}-01-01\' and \'{}-01-01\''.format(permnolist, start_year, end_year)
     )
-    prices_sp50 = prices
+    prices_sp50 = prices_raw
 
     permnos_m = prices_sp50['permno'].unique()
 
     # Process the price data
-
+    prc_merge = None
     for i in permnos_m:
         if i == permnos_m[0]:
             x = prices_sp50[prices_sp50['permno'] == i][['date', 'prc']].set_index('date', drop=True)
@@ -124,20 +91,11 @@ def fetch_and_store_sp500(db):
             prc_merge = pd.merge(prc_merge, y, how='outer', left_index=True, right_index=True)
 
     print('Price Data Loaded')
-    ## ----------------------------- EXPORT --------------------------------
-
-    # with pd.ExcelWriter(paths['xlsx constituents & prices']) as writer1:
-    #     const.to_excel(writer1, 'Compustat_const')
-    #     crsp_id.to_excel(writer1, 'CRSP_const')
-    #     prc_merge.to_excel(writer1, 'Prices')
-    #     writer1.save()
-    #
-    # prices.to_csv(paths['raw prices'], sep='\t', encoding='utf-8')
 
     with pd.HDFStore(paths['prices_raw']) as store:
         store['Compustat_const'] = const
         store['CRSP_const'] = crsp_id
-        store['Prices_raw'] = prices
+        store['Prices_raw'] = prices_raw
         store['Prices'] = prc_merge
     return prc_merge, crsp_id
 
@@ -146,7 +104,7 @@ def store_options(option_type='call'):
     with pd.HDFStore(paths['prices_raw']) as store:
         CRSP_const = store['CRSP_const']
 
-    ## Create constituents data frame
+    # Create constituents data frame
     open(paths['all_options_h5'], 'w').close()  # delete previous HDF
     CRSP_const = CRSP_const[CRSP_const['ending'] > '1996-01-01']
 
@@ -165,8 +123,6 @@ def store_options(option_type='call'):
         idx3 = data.best_bid > 0
         idx = idx1 & idx2 & idx3
         const = CRSP_const.loc[idx, :].reset_index(drop=True)
-        listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'best_offer', 'impl_volatility', 'delta', 'strike_price']],
-                         const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
         listO = data[['id', 'date', 'days', 'best_bid', 'best_offer', 'impl_volatility', 'delta', 'strike_price']]
 
         option_price = (listO.best_bid + listO.best_offer) / 2
@@ -362,6 +318,7 @@ with pd.HDFStore(paths['names']) as store:
     names = store['names']
 
 df = pd.DataFrame()
+options_data_year = None
 for year in range(start_year, end_year):  # range(1996, 2016)
     print('Loading options for year {}'.format(year))
 
@@ -781,16 +738,8 @@ synth_df = generate_synthetic_data()
 
 print('Storing result on disc')
 with pd.HDFStore(paths['options_for_ann']) as store:
-    # store['options_for_ann'] = merged
-    # merged = store['options_for_ann']
-    # store['train'] = train
-    # store['validate'] = validate
-    # store['test'] = test
-    # store['single'] = single_stock
     store['data'] = data
     store['synthetic'] = synth_df
     store['availability_summary'] = availability_summary
 
 print('Done')
-
-sys.exit()

@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 from sklearn import preprocessing
-from scipy.stats import norm
 from time import time
 from datetime import datetime, timedelta
 import os
@@ -26,12 +25,13 @@ from data import (
     synth
 )
 
+from models import black_scholes_pricer
 
 
 def timeit(method):
-    '''
+    """
     Decorator to print the runtime of a function after it finishes
-    '''
+    """
     def timed(*args, **kw):
         ts = time()
         result = method(*args, **kw)
@@ -42,25 +42,29 @@ def timeit(method):
 
 
 def get_data_for_single_stock_and_day(sorted_set, stock, daterange):
-    single_stock = sorted_set.loc[(slice(None), stock),:]
-    single_stock.reset_index(inplace=True) # Otherwise the full index of sorted_set remains
+    single_stock = sorted_set.loc[(slice(None), stock), :]
+    single_stock.reset_index(inplace=True)  # Otherwise the full index of sorted_set remains
     single_stock.set_index(['date', 'permno'], inplace=True)
     single_stock_multiple_days = []
     days = []
     for i in daterange:
         day = single_stock.index.levels[0][i]
         days.append(single_stock.index.levels[0][i])
-        single_stock_multiple_days.append(sorted_set.loc[(day, stock),:])
-    single_stock_multiple_days_single_df = sorted_set.loc[(days, stock),:]
+        single_stock_multiple_days.append(sorted_set.loc[(day, stock), :])
+    single_stock_multiple_days_single_df = sorted_set.loc[(days, stock), :]
     return single_stock_multiple_days_single_df
 
 
 def get_data_window(start_date='2010-01-01',
                     end_train_start_val_date='2010-06-30',
                     end_val_date='2010-12-31',
-                    input_columns=['days', 'moneyness'],
-                    output_columns=['scaled_option_price'],
+                    input_columns=None,
+                    output_columns=None,
                     stock=some_stock):
+    if input_columns is None:
+        input_columns = ['days', 'moneyness']
+    if output_columns is None:
+        output_columns = ['scaled_option_price']
     dates = dataset.index.get_level_values(0)
     stocks = dataset.index.get_level_values(1)
 
@@ -81,11 +85,13 @@ def get_data_window(start_date='2010-01-01',
     return data
 
 
-def get_data_package(model, columns=['days', 'moneyness'], include_synth=False, normalize='no',
+def get_data_package(model, columns=None, include_synth=False, normalize='no',
                      start_date='2010-01-01',
                      end_train_start_val_date='2010-06-30',
                      end_val_date='2010-12-31',
                      stock=some_stock):
+    if columns is None:
+        columns = ['days', 'moneyness']
     if model == 'BS':
         output_columns = ['scaled_option_price']
     elif model == 'BS_also_hedging':
@@ -94,7 +100,7 @@ def get_data_package(model, columns=['days', 'moneyness'], include_synth=False, 
         number_of_features = model.input.shape[1]._value
         more_than_one_output = type(model.output) is list
         if len(columns) != number_of_features:
-            raise('mismatch between model feature count and number of columns selected in data')
+            raise ValueError('mismatch between model feature count and number of columns selected in data')
 
         if more_than_one_output:
             output_columns = ['scaled_option_price', 'perfect_hedge_1']
@@ -119,18 +125,16 @@ def get_data_package(model, columns=['days', 'moneyness'], include_synth=False, 
         stock=stock)
 
     if include_synth:
-        X_synth = synth.loc[:,columns]
-        Y_synth = synth.loc[:,output_columns]
+        X_synth = synth.loc[:, columns]
+        Y_synth = synth.loc[:, output_columns]
         X_train, Y_train, X_val, Y_val = data
 
         new_X_train = pd.concat([X_train, X_synth])
         new_Y_train = pd.concat([Y_train, Y_synth])
 
-
         data = new_X_train, new_Y_train, X_val, Y_val
     else:
         X_synth = Y_synth = None
-
 
     if normalize == 'no':
         scaler_X = scaler_Y = None
@@ -163,7 +167,8 @@ def get_data_package(model, columns=['days', 'moneyness'], include_synth=False, 
     DataPackage = namedtuple('DataPackage', 'data X_synth Y_synth ref_data scaler_X scaler_Y')
     return DataPackage(data, X_synth, Y_synth, ref_data, scaler_X, scaler_Y)
 
-def getHedgingErrors(deltas, ref_data, option_type):
+
+def get_hedging_errors(deltas, ref_data):
     if option_type == 'call':
         option_payout = (ref_data['prc_atExpiration'] - ref_data.strike_price).clip(lower=0)
     elif option_type == 'put':
@@ -190,14 +195,16 @@ def getHedgingErrors(deltas, ref_data, option_type):
     return HedgingResult(change_in_portfolio_value, PHE, MSHE, MAPHE)
 
 
-def run_and_store_ANN(model, inSample=False, reset='yes', nb_epochs=5, data_package=None, verbose=0, model_name='custom',
-                      columns=['days', 'moneyness'], get_deltas=False, include_synth=False, normalize='no',
+def run_and_store_ann(model, in_sample=False, reset='yes', nb_epochs=5, data_package=None, verbose=0,
+                      model_name='custom', columns=None, get_deltas=False, include_synth=False, normalize='no',
                       batch_size=25, starting_time_str=None):
+    if columns is None:
+        columns = ['days', 'moneyness']
     if data_package is None:
-        data, X_synth, Y_synth, ref_data_tuple, scaler_X, scaler_Y = get_data_package(model, columns, include_synth, normalize)
+        data, X_synth, Y_synth, ref_data_tuple, scaler_X, scaler_Y = get_data_package(model, columns, include_synth,
+                                                                                      normalize)
     else:
         data, X_synth, Y_synth, ref_data_tuple, scaler_X, scaler_Y = data_package
-
 
     loss, Y_prediction, history = run(model,
                                       data=data,
@@ -210,7 +217,7 @@ def run_and_store_ANN(model, inSample=False, reset='yes', nb_epochs=5, data_pack
                                       segment_plot=False,
                                       verbose=verbose,
                                       model_name=model_name,
-                                      inSample=inSample,
+                                      in_sample=in_sample,
                                       batch_size=batch_size,
                                       starting_time_str=starting_time_str)
     last_loss = loss[-1]
@@ -230,7 +237,7 @@ def run_and_store_ANN(model, inSample=False, reset='yes', nb_epochs=5, data_pack
         loss_tuple = None
 
     X_train, Y_train, X_val, Y_val = data
-    if inSample:
+    if in_sample:
         sample = X_train.copy()
         target = Y_train.copy()
         ref_data = ref_data_tuple[0]
@@ -251,26 +258,18 @@ def run_and_store_ANN(model, inSample=False, reset='yes', nb_epochs=5, data_pack
         target.drop(index=Y_synth.index, inplace=True)
 
     if normalize != 'no':
-        Y_prediction = scaler_Y.inverse_transform(Y_prediction.reshape(-1,1))
+        Y_prediction = scaler_Y.inverse_transform(Y_prediction.reshape(-1, 1))
 
-        target_inv_scaled = scaler_Y.inverse_transform(target['scaled_option_price'].values.reshape(-1,1))
+        target_inv_scaled = scaler_Y.inverse_transform(target['scaled_option_price'].values.reshape(-1, 1))
         sample_inv_scaled = scaler_X.inverse_transform(sample)
         sample = pd.DataFrame(sample_inv_scaled, index=sample.index, columns=sample.columns)
         target = pd.DataFrame(target_inv_scaled, index=target.index, columns=target.columns)
-        '''
-        X_train = scaler_X.inverse_transform(X_train)
-        Y_train = scaler_Y.inverse_transform(Y_train)
-        X_val = scaler_X.inverse_transform(X_val)
-        Y_val = scaler_Y.inverse_transform(Y_val)
-        data = X_train, Y_train, X_val, Y_val
-        '''
-
 
     if get_deltas:
-        deltas = extract_deltas(model, sample, ref_data.loc[:,'strike_price'])
+        deltas = extract_deltas(model, sample, ref_data.loc[:, 'strike_price'])
         sample["calculated_delta"] = deltas
 
-        HE, PHE, MSHE, MAPHE = getHedgingErrors(deltas, ref_data, option_type)
+        HE, PHE, MSHE, MAPHE = get_hedging_errors(deltas, ref_data)
         sample["hedging_error"] = HE
         sample['percentage_hedging_error'] = PHE
 
@@ -287,7 +286,7 @@ def run_and_store_ANN(model, inSample=False, reset='yes', nb_epochs=5, data_pack
                 ) + (
                     Y_prediction[1].flatten() *   # Super sketchy:
                     (
-                            ref_data.loc[:, 'option_price_shifted_1'] - ref_data.loc[:,'option_price']
+                            ref_data.loc[:, 'option_price_shifted_1'] - ref_data.loc[:, 'option_price']
                     )
                 )
             ) / ref_data.loc[:, 'prc']
@@ -325,6 +324,7 @@ def run_and_store_ANN(model, inSample=False, reset='yes', nb_epochs=5, data_pack
     # else: success = True
     ANNResult = namedtuple('ANNResult', 'history last_loss loss_tuple MSHE MAPHE')
     return ANNResult(history, last_loss, loss_tuple, MSHE, MAPHE)
+
 
 class TrainValTensorBoard(TensorBoard):
     # https://stackoverflow.com/questions/47877475/keras-tensorboard-plot-train-and-validation-scalars-in-a-same-figure/48393723
@@ -366,7 +366,7 @@ class TrainValTensorBoard(TensorBoard):
 
 def run(model,
         data=None,
-        nb_epochs = 1,
+        nb_epochs=1,
         reset='yes',
         offset=0,
         y_offset=0,
@@ -376,7 +376,7 @@ def run(model,
         validate_size=0,
         verbose=0,
         model_name='',
-        inSample=False,
+        in_sample=False,
         batch_size=25,
         starting_time_str=None
         ):
@@ -426,27 +426,28 @@ def run(model,
 
     callbacks = []
     if not onCluster:
-        callbacks.append(TrainValTensorBoard(write_graph=False, log_dir="logs\\{}_{}".format(model_name, starting_time_str)))
+        callbacks.append(TrainValTensorBoard(
+            write_graph=False,
+            log_dir="logs\\{}_{}".format(model_name, starting_time_str))
+        )
 
     if useEarlyStopping:
         callbacks.append(EarlyStopping(monitor='val_loss', min_delta=0, patience=20, verbose=0, mode='auto'))
 
-
-    # validation_data = None
     validation_data = (X_val, Y_val)
 
     if reset == 'yes':
         model.load_weights(paths['weights'])
 
     if reset != 'reuse':
-        history = model.fit(X_train, Y_train, batch_size=batch_size, epochs=nb_epochs, verbose=verbose, callbacks=callbacks,
-                            validation_data=validation_data)
+        history = model.fit(X_train, Y_train, batch_size=batch_size, epochs=nb_epochs, verbose=verbose,
+                            callbacks=callbacks, validation_data=validation_data)
         loss = history.history['loss']
-        #abs_error = history.history['mean_absolute_error']
+        # abs_error = history.history['mean_absolute_error']
     else:
         score = model.evaluate(X_val, Y_val, verbose=0)
         loss.append(score[0])
-        #abs_error.append(score[1])
+        # abs_error.append(score[1])
 
     '''
         for i in range(nb_epochs):
@@ -465,7 +466,7 @@ def run(model,
                 else:
                     c = 0
     '''
-    if inSample:
+    if in_sample:
         prediction_input_data = X_train
         prediction_target = Y_train
     else:
@@ -513,46 +514,28 @@ def get_gradients(model, inputs):
     return gradients_of_individual_inputs
 
 
-def get_SSD(model, inputs):
-    from actions import get_gradients
+def get_ssd(model, inputs):
     gradients_of_individual_inputs = get_gradients(model, inputs)
     SSD = np.square(gradients_of_individual_inputs).mean(axis=0)
     return SSD
 
 
-def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', filename='BS_outSample'):
+def run_black_scholes(data_package, in_sample=False, vol_proxy='hist_realized'):
 
-    # data, X_synth, Y_synth, ref_data_tuple, scaler_X, scaler_Y = data_package
-    data = data_package[0]
-    ref_data_tuple = data_package[3]
+    data = data_package.data
+    ref_data_tuple = data_package.ref_data
     ref_data = ref_data_tuple[2]
     X_train, Y_train, X_test, Y_test = data
-    if inSample:
+    if in_sample:
         X_test, Y_test = X_train, Y_train
 
     X_train.days = X_train.days / 365
     X_test.days = X_test.days / 365
 
-
     df = pd.concat([X_train, X_test])
     dateIndex = df.index.get_level_values(0)
 
-
-    def black_scholes_pricer(m, t, r, s, optiontype='call'):
-        d1 = 1 / (s * (t ** (1 / 2))) * (np.log(m) + (r + (s ** 2) / 2) * t)
-        d2 = d1 - s * t ** (1 / 2)
-        if optiontype == 'call':
-            price = norm.cdf(d1) * m - norm.cdf(d2) * 1 * np.exp(-r * t)
-            delta = norm.cdf(d1)
-        elif optiontype == 'put':
-            price = norm.cdf(-d2) * 1 * np.exp(-r * t) - norm.cdf(-d1) * m
-            delta = - norm.cdf(-d1)
-        else:
-            raise ValueError("optiontype must be 'call' or 'put'")
-        return price, delta
-
-
-    def BS_predict(point):
+    def bs_predict(point):
         days, moneyness, hist_impl_volatility, v60, r = tuple(point)
         date = point.name[0]
         if vol_proxy == 'hist_implied':
@@ -565,11 +548,10 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
             vola = bilinear_vsurface_interpolation(relevant_quotes, days, moneyness)
         else:
             raise ValueError
-        result = black_scholes_pricer(moneyness, days, r, vola)
+        result = black_scholes_pricer(moneyness, days, r, vola, option_type)
         return pd.Series(result, index=['price', 'delta'])
 
-
-    prediction = X_test.apply(BS_predict, axis=1)
+    prediction = X_test.apply(bs_predict, axis=1)
     assert not prediction.isnull().any().any()
 
     results = X_test.copy()
@@ -578,7 +560,7 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
     results['delta'] = prediction.delta
     results['error'] = results.scaled_option_price - results.prediction
 
-    HE, PHE, MSHE, MAPHE = getHedgingErrors(prediction.delta, ref_data, option_type)
+    HE, PHE, MSHE, MAPHE = get_hedging_errors(prediction.delta, ref_data)
 
     results["hedging_error"] = HE
 
@@ -588,7 +570,6 @@ def run_black_scholes(data_package, inSample=False, vol_proxy='hist_realized', f
 
     BSResult = namedtuple('BSResult', 'MSE MAE MAPE MSHE MAPHE')
     return BSResult(MSE, MAE, MAPE, MSHE, MAPHE)
-
 
 
 def bilinear_vsurface_interpolation(quotes, ttm, mon):
@@ -615,7 +596,7 @@ def bilinear_vsurface_interpolation(quotes, ttm, mon):
             lower_than_later = lower_than_later.sort_values('moneyness', ascending=False).iloc[0]
             higher_than_later = higher_than_later.sort_values('moneyness', ascending=False).iloc[-1]
 
-            later_ratio = (mon - lower_than_later.moneyness) / (higher_than_later.moneyness - lower_than_later.moneyness)
+            later_ratio = (mon - lower_than_later.moneyness)/(higher_than_later.moneyness - lower_than_later.moneyness)
             interp_later = (
                     lower_than_later.loc[['impl_volatility', 'days']] * (1 - later_ratio)
                     + higher_than_later.loc[['impl_volatility', 'days']] * later_ratio
@@ -626,7 +607,6 @@ def bilinear_vsurface_interpolation(quotes, ttm, mon):
     else:
         lower_than_earlier = earlier_than.loc[earlier_than.moneyness <= mon]
         higher_than_earlier = earlier_than.loc[earlier_than.moneyness > mon]
-
 
         if len(lower_than_earlier) == 0:
             higher_than_earlier = higher_than_earlier.sort_values('moneyness', ascending=False).iloc[-1]
@@ -655,7 +635,5 @@ def bilinear_vsurface_interpolation(quotes, ttm, mon):
             interp = interp_earlier.impl_volatility
         else:
             interp = interp_earlier.impl_volatility * (1 - ratio) + interp_later.impl_volatility * ratio
-
-
 
     return interp

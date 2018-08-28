@@ -35,16 +35,18 @@ def full_model(input_dim=2, num_layers=5, nodes_per_layer = 200, loss='mape', ac
     return model
 
 
-def black_scholes_price(m,t,r,s,type='call'):
+def black_scholes_pricer(m, t, r, s, option_type='call'):
     d1 = 1/(s*(t**(1/2)))*(np.log(1/m)+(r+(s**2)/2)*t)
     d2 = d1 - s*t**(1/2)
-    if type == 'put':
+    if option_type == 'put':
         price = norm.cdf(d1) * 1 - norm.cdf(d2) * m * np.exp(-r * t)
-    elif type == 'call':
+        delta = norm.cdf(d1)
+    elif option_type == 'call':
         price = norm.cdf(-d2) * m * np.exp(-r * t) - norm.cdf(-d1) * 1
+        delta = - norm.cdf(-d1)
     else:
-        raise ValueError("type must be 'call' or 'put'")
-    return price
+        raise ValueError("optiontype must be 'call' or 'put'")
+    return price, delta
 
 #-----------------------------------------------------------------------------
 # All models below this point are not used for the analysis in the thesis.

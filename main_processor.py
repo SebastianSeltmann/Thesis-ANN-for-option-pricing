@@ -33,11 +33,11 @@ from models import (
 )
 from actions import (
     get_data_package,
-    run_and_store_ANN,
+    run_and_store_ann,
     run,
     run_black_scholes,
     get_gradients,
-    get_SSD,
+    get_ssd,
 )
 from data import (
     windows_list,
@@ -155,7 +155,7 @@ def perform_experiment():
                 starting_time = datetime.now()
                 starting_time_str = '{:%Y-%m-%d_%H-%M}'.format(starting_time)
 
-                annResult = run_and_store_ANN(model=model, inSample=True, model_name='i_'+model_name+'_inSample',
+                annResult = run_and_store_ann(model=model, in_sample=True, model_name='i_' + model_name + '_inSample',
                                               nb_epochs=separate_initial_epochs, reset='yes', columns=used_features,
                                               include_synth=include_synthetic_data, normalize=normalization,
                                               batch_size=batch_size, data_package=data_package,
@@ -163,6 +163,7 @@ def perform_experiment():
                 initial_hist = annResult.history
                 initial_loss = annResult.last_loss
 
+                # During early experimentation it was useful to quickly abort models that failed to converge
                 if initial_loss > required_precision:
                     print('FAILED', end=' ')
                     cols['failed'].append(int(True))
@@ -172,7 +173,7 @@ def perform_experiment():
 
                 else:
                     cols['failed'].append(int(False))
-                    annResult = run_and_store_ANN(model=model, inSample=True, model_name=model_name+'_inSample',
+                    annResult = run_and_store_ann(model=model, in_sample=True, model_name=model_name + '_inSample',
                                                   nb_epochs=epochs - separate_initial_epochs, reset='continue',
                                                   columns=used_features, get_deltas=True,
                                                   include_synth=include_synthetic_data, normalize=normalization,
@@ -180,7 +181,7 @@ def perform_experiment():
                                                   starting_time_str=starting_time_str)
                     hist, loss, loss_tuple, MSHE, MAPHE = annResult
 
-                    annResult = run_and_store_ANN(model=model, inSample=False, model_name=model_name+'_outSample',
+                    annResult = run_and_store_ann(model=model, in_sample=False, model_name=model_name + '_outSample',
                                                   reset='reuse', columns=used_features, get_deltas=True,
                                                   normalize=normalization, batch_size=batch_size,
                                                   data_package=data_package, starting_time_str=starting_time_str)
@@ -197,8 +198,8 @@ def perform_experiment():
                     scaler_X = data_package.scaler_X
                     X_train = data[0]
                     X_val = data[2]
-                    SSD_train = get_SSD(model, X_train)
-                    SSD_val = get_SSD(model, X_val)
+                    SSD_train = get_ssd(model, X_train)
+                    SSD_val = get_ssd(model, X_val)
                     SSD_distribution_train.append(SSD_train)
                     SSD_distribution_val.append(SSD_val)
 
@@ -265,7 +266,7 @@ def perform_experiment():
                                                       segment_plot=False,
                                                       verbose=0,
                                                       model_name=model_name,
-                                                      inSample=False,
+                                                      in_sample=False,
                                                       batch_size=batch_size,
                                                       starting_time_str=starting_time_str)
 

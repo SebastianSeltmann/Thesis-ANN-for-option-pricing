@@ -67,7 +67,8 @@ active_feature_combinations = list(range(len(full_feature_combination_list)))
 # ----------------------------------
 epochs = 250
 loss_func = 'mse'
-# if required_precision is not reached during initial training, the run is declared "failed", saving time
+# if required_precision is not reached during initial training, the run is declared "failed"
+# only relevant during initial experimentation phase
 if loss_func == 'mape':
     required_precision = 10**5
 elif loss_func == 'mse':
@@ -85,9 +86,9 @@ useEarlyStopping = False
 
 identical_reruns = 1
 
-activations = ['relu']  # 'tanh'
-number_of_nodes = [250]  # [250]
-number_of_layers = [3]  # [3]
+activations = ['relu']
+number_of_nodes = [250]
+number_of_layers = [3]
 optimizers = ['adam']
 include_synthetic_datas = [True, False]
 dropout_rates = [0.1]
